@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Active Stress & Pressure</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    body { padding: 1rem; }
+    .slider-group h5 { margin-top: 0.5rem; }
+    #chart { height: 500px; }
+  </style>
+</head>
+<body>
+  <div class="container-fluid">
+    <h3 class="mb-4">Interactive Active Stress &amp; Pressure Model</h3>
+    <div class="row">
+      <div class="col-md-4 slider-group">
+        <h5>Amplitudes</h5>
+        <label for="sigma0" class="form-label">σ₀ [Pa] <span id="sigma0-value" class="fw-bold"></span></label>
+        <input type="range" id="sigma0" class="form-range" min="0" max="300000" step="10000" value="150000">
+        <label for="sigma_pre" class="form-label">σ_pre [Pa] <span id="sigma_pre-value" class="fw-bold"></span></label>
+        <input type="range" id="sigma_pre" class="form-range" min="0" max="20000" step="500" value="7000">
+        <label for="sigma_mid" class="form-label">σ_mid [Pa] <span id="sigma_mid-value" class="fw-bold"></span></label>
+        <input type="range" id="sigma_mid" class="form-range" min="0" max="30000" step="500" value="16000">
+        <label for="a_min" class="form-label">aₘᵢₙ [–] <span id="a_min-value" class="fw-bold"></span></label>
+        <input type="range" id="a_min" class="form-range" min="-100" max="0" step="1" value="-30">
+        <label for="a_max" class="form-label">aₘₐₓ [–] <span id="a_max-value" class="fw-bold"></span></label>
+        <input type="range" id="a_max" class="form-range" min="0" max="100" step="1" value="5">
+      </div>
+      <div class="col-md-4 slider-group">
+        <h5>Time-constants (γ)</h5>
+        <label for="gamma" class="form-label">γ [s] <span id="gamma-value" class="fw-bold"></span></label>
+        <input type="range" id="gamma" class="form-range" min="0.001" max="0.02" step="0.001" value="0.005">
+        <label for="gamma_pre" class="form-label">γ_pre [s] <span id="gamma_pre-value" class="fw-bold"></span></label>
+        <input type="range" id="gamma_pre" class="form-range" min="0.001" max="0.02" step="0.001" value="0.005">
+        <label for="gamma_mid" class="form-label">γ_mid [s] <span id="gamma_mid-value" class="fw-bold"></span></label>
+        <input type="range" id="gamma_mid" class="form-range" min="0.001" max="0.02" step="0.001" value="0.005">
+        <label for="b_min" class="form-label">bₘᵢₙ [–] <span id="b_min-value" class="fw-bold"></span></label>
+        <input type="range" id="b_min" class="form-range" min="-100" max="0" step="1" value="-30">
+        <label for="b_max" class="form-label">bₘₐₓ [–] <span id="b_max-value" class="fw-bold"></span></label>
+        <input type="range" id="b_max" class="form-range" min="0" max="100" step="1" value="5">
+      </div>
+      <div class="col-md-4 slider-group">
+        <h5>Timing</h5>
+        <label for="t_sys" class="form-label">tₛʸˢ [s] <span id="t_sys-value" class="fw-bold"></span></label>
+        <input type="range" id="t_sys" class="form-range" min="0.0" max="0.5" step="0.01" value="0.16">
+        <label for="t_dias" class="form-label">t_dᵢₐ [s] <span id="t_dias-value" class="fw-bold"></span></label>
+        <input type="range" id="t_dias" class="form-range" min="0.3" max="0.8" step="0.01" value="0.484">
+        <label for="t_pre" class="form-label">t_pre [s] <span id="t_pre-value" class="fw-bold"></span></label>
+        <input type="range" id="t_pre" class="form-range" min="0.0" max="0.5" step="0.01" value="0.17">
+        <label for="t_mid" class="form-label">t_mid [s] <span id="t_mid-value" class="fw-bold"></span></label>
+        <input type="range" id="t_mid" class="form-range" min="0.3" max="0.8" step="0.01" value="0.48">
+      </div>
+    </div>
+    <div class="row mt-4">
+      <div class="col-12">
+        <div id="chart"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const N = 1001;const dt = 1.0/(N-1);const t = Array.from({length:N}, (_,i) => i*dt);
+    // Core functions
+    function Splus(x, gamma) { return 0.5*(1 + Math.tanh(x/gamma)); }
+    function Sminus(x, gamma) { return 0.5*(1 - Math.tanh(x/gamma)); }
+    function activation(t, t_on, t_off, gamma) { return t.map(v => Splus(v - t_on, gamma) * Sminus(v - t_off, gamma)); }
+
+    function computeStress(params) {
+      const {sigma0, gamma, a_min, a_max, t_sys, t_dias} = params;
+      const f = activation(t, t_sys, t_dias, gamma);
+      const a = f.map((fv,i) => a_max*fv + a_min*(1-fv));
+      const adot = a.map((v,i) => i>0 ? (a[i]-a[i-1])/dt : 0);
+      const tau = Array(N).fill(0);
+      for(let i=1; i<N; ++i) {
+        tau[i] = tau[i-1] + dt * (
+          -Math.abs(a[i])*tau[i-1]
+          + sigma0 * Math.max(adot[i],0)
+        );
+      }
+      return tau;
+    }
+
+    function computePressure(params) {
+      const {sigma_pre, sigma_mid, gamma_pre, t_pre, gamma_mid, t_mid, b_min, b_max} = params;
+      const gpre = activation(t, t_pre, t_mid, gamma_pre);
+      const gdot = gpre.map((v,i) => i>0 ? (gpre[i]-gpre[i-1])/dt : 0);
+      const bact = activation(t, t_mid, t_pre, gamma_mid);
+      const b = bact.map((fv,i) => b_max*fv + b_min*(1-fv));
+      const bdot = b.map((v,i) => i>0 ? (b[i]-b[i-1])/dt : 0);
+      const p = Array(N).fill(0);
+      for(let i=1; i<N; ++i) {
+        p[i] = p[i-1] + dt * (
+          -Math.abs(b[i])*p[i-1]
+          + sigma_mid * Math.max(bdot[i],0)
+          + sigma_pre * Math.max(gdot[i],0)
+        );
+      }
+      return p;
+    }
+
+    // Read UI, update value spans
+    function readParams() {
+      const ids = ['sigma0','sigma_pre','sigma_mid','a_min','a_max',
+                   'gamma','gamma_pre','gamma_mid','b_min','b_max',
+                   't_sys','t_dias','t_pre','t_mid'];
+      const params = {};
+      ids.forEach(id => {
+        const el = document.getElementById(id);
+        const val = parseFloat(el.value);
+        params[id] = val;
+        document.getElementById(id+'-value').textContent = val.toFixed(3);
+      });
+      return params;
+    }
+
+    // Plot or update
+    function updatePlot() {
+      const params = readParams();
+      const tau = computeStress(params);
+      const p   = computePressure(params);
+
+      // vertical markers
+      const marks = [
+        {x:params.t_sys, name:'t_sys', color:'crimson', dash:'dash'},
+        {x:params.t_dias, name:'t_dias', color:'darkorange', dash:'dash'},
+        {x:params.t_pre, name:'t_pre', color:'forestgreen', dash:'dot'},
+        {x:params.t_mid, name:'t_mid', color:'navy', dash:'dot'}
+      ];
+      const shapes = marks.map(m=>({
+        type:'line', x0:m.x, x1:m.x, y0:0, y1:1, xref:'x', yref:'paper',
+        line:{color:m.color, dash:m.dash}
+      }));
+      const annots = marks.map(m=>({
+        x:m.x, y:1.02, xref:'x', yref:'paper', text:m.name,
+        showarrow:false, font:{color:m.color}, align:'center'
+      }));
+
+      const trace1 = { x:t, y:tau, name:'τ(t)', yaxis:'y1', mode:'lines' };
+      const trace2 = { x:t, y:p,   name:'p(t)', yaxis:'y2', mode:'lines', line:{dash:'dash'} };
+      const layout = {
+        xaxis: { title:'Time [s]' },
+        yaxis: { title:'Stress τ [Pa]' },
+        yaxis2: { title:'Pressure p [Pa]', overlaying:'y', side:'right' },
+        shapes: shapes,
+        annotations: annots,
+        margin: { t:50, b:50, l:50, r:50 }
+      };
+
+      Plotly.react('chart', [trace1, trace2], layout, {responsive:true});
+    }
+    // Initialize
+    document.querySelectorAll('.form-range').forEach(slider => {
+      slider.addEventListener('input', updatePlot);
+    });
+    updatePlot();
+  </script>
+</body>
+</html>
