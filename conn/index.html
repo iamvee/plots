@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Research Connections Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+            background-color: #f8fafc;
+        }
+        #chart-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            min-height: 60vh;
+        }
+        svg {
+            width: 100%;
+            height: auto;
+            max-width: 800px;
+            font: 10px sans-serif;
+        }
+        path.link {
+            fill: none;
+            stroke-opacity: 0.3;
+        }
+        .node {
+            cursor: pointer;
+        }
+        .node:hover {
+            font-weight: bold;
+        }
+        .node--leaf text {
+            fill: #005f73;
+            font-size: 10px;
+        }
+        .node--internal text {
+            fill: #ca6702;
+            font-size: 12px;
+            font-weight: 700;
+            text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff;
+        }
+        #tooltip {
+            position: absolute;
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            max-width: 300px;
+            font-size: 12px;
+            z-index: 1000;
+        }
+        #tooltip h3 {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 4px;
+            color: #005f73;
+        }
+        .json-input {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .error {
+            border-color: #ef4444 !important;
+            background-color: #fef2f2 !important;
+        }
+        .success {
+            border-color: #22c55e !important;
+            background-color: #f0fdf4 !important;
+        }
+        .status-message {
+            font-size: 12px;
+            margin-top: 4px;
+        }
+        .error-message {
+            color: #ef4444;
+        }
+        .success-message {
+            color: #22c55e;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-[#005f73] mb-2">Interactive Research Connections Visualizer</h1>
+            <p class="text-md md:text-lg text-gray-600 max-w-3xl mx-auto">
+                Input your own research data and theme mappings to generate an interactive visualization of connections between papers.
+            </p>
+        </header>
+
+        <!-- Input Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Paper Data Input -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-lg font-semibold mb-4 text-gray-800">Paper Data (JSON)</h3>
+                <textarea 
+                    id="paperDataInput" 
+                    class="json-input w-full h-64 p-3 border border-gray-300 rounded-md resize-none"
+                    placeholder='[
+  {
+    "author": "Smith (2023)",
+    "year": 2023,
+    "title": "Example Paper Title",
+    "themes": ["A", "B"],
+    "citations": 10
+  }
+]'></textarea>
+                <div id="paperDataStatus" class="status-message"></div>
+                <div class="mt-2 text-xs text-gray-500">
+                    Format: Array of objects with author, year, title, themes (array), and citations fields.
+                </div>
+            </div>
+
+            <!-- Theme Map Input -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-lg font-semibold mb-4 text-gray-800">Theme Mapping (JSON)</h3>
+                <textarea 
+                    id="themeMapInput" 
+                    class="json-input w-full h-64 p-3 border border-gray-300 rounded-md resize-none"
+                    placeholder='{
+  "A": "Machine Learning",
+  "B": "Data Analysis",
+  "C": "Visualization"
+}'></textarea>
+                <div id="themeMapStatus" class="status-message"></div>
+                <div class="mt-2 text-xs text-gray-500">
+                    Format: Object mapping theme keys to descriptive names.
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mb-6">
+            <button 
+                id="generateBtn" 
+                class="bg-[#005f73] hover:bg-[#0a7a8a] text-white font-semibold py-2 px-6 rounded-lg transition-colors duration-200"
+                disabled>
+                Generate Visualization
+            </button>
+            <button 
+                id="loadExampleBtn" 
+                class="ml-4 bg-gray-600 hover:bg-gray-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors duration-200">
+                Load Example Data
+            </button>
+        </div>
+
+        <div id="chart-container">
+            <div id="placeholder" class="text-center text-gray-500 py-16">
+                <p class="text-lg">Enter your data above and click "Generate Visualization" to see the interactive chart.</p>
+            </div>
+            <svg id="chart" style="display: none;"></svg>
+        </div>
+
+        <div id="tooltip"></div>
+    </div>
+
+<script>
+// Example data for loading
+const examplePaperData = [
+{ "author": "Author 1", "year": 2025, "title": "Study Title 1", "themes": ["E", "C", "D"], "citations": 0},
+{"author": "Author 2", "year": 2025, "title": "Study Title 2", "themes": ["E", "D", "G"], "citations": 0},
+{"author": "Author 3", "year": 2025, "title": "Study Title 3", "themes": ["C", "E"], "citations": 0},
+{"author": "Author 4", "year": 2025, "title": "Study Title 4", "themes": ["E", "F"], "citations": 0},
+{"author": "Author 5", "year": 2025, "title": "Study Title 5", "themes": ["D", "G"], "citations": 0},
+{"author": "Author 6", "year": 2024, "title": "Study Title 6", "themes": ["B", "D", "G"], "citations": 0},
+{"author": "Author 7", "year": 2024, "title": "Study Title 7", "themes": ["A", "B", "C"], "citations": 1},
+{"author": "Author 8", "year": 2024, "title": "Study Title 8", "themes": ["B", "G"], "citations": 0},
+{"author": "Author 9", "year": 2024, "title": "Study Title 9", "themes": ["D", "B"], "citations": 0},
+{"author": "Author 10", "year": 2023, "title": "Study Title 10", "themes": ["A", "B", "C"], "citations": 15},
+{"author": "Author 11", "year": 2023, "title": "Study Title 11", "themes": ["A", "B", "F"], "citations": 11},
+{"author": "Author 12", "year": 2023, "title": "Study Title 12", "themes": ["B", "D", "F"], "citations": 22},
+{"author": "Author 13", "year": 2023, "title": "Study Title 13", "themes": ["E", "F"], "citations": 23},
+{"author": "Author 14", "year": 2023, "title": "Study Title 14", "themes": ["C", "E"], "citations": 11},
+{"author": "Author 15", "year": 2023, "title": "Study Title 15", "themes": ["D"], "citations": 14},
+{"author": "Author 16", "year": 2022, "title": "Study Title 16", "themes": ["C", "E"], "citations": 45},
+{"author": "Author 17", "year": 2022, "title": "Study Title 17", "themes": ["A", "B"], "citations": 49},
+{"author": "Author 18", "year": 2022, "title": "Study Title 18", "themes": ["B", "G"], "citations": 11},
+{"author": "Author 19", "year": 2022, "title": "Study Title 19", "themes": ["D", "B", "F"], "citations": 18},
+{"author": "Author 20", "year": 2022, "title": "Study Title 20", "themes": ["C"], "citations": 16},
+{"author": "Author 21", "year": 2022, "title": "Study Title 21", "themes": ["B", "C"], "citations": 27},
+{"author": "Author 22", "year": 2021, "title": "Study Title 22", "themes": ["A", "B", "G"], "citations": 5},
+{"author": "Author 23", "year": 2021, "title": "Study Title 23", "themes": ["C", "D", "F"], "citations": 35},
+{"author": "Author 24", "year": 2021, "title": "Study Title 24", "themes": ["B", "G"], "citations": 22},
+{"author": "Author 25", "year": 2021, "title": "Study Title 25", "themes": ["B", "E"], "citations": 43},
+{"author": "Author 26", "year": 2021, "title": "Study Title 26", "themes": ["E", "F"], "citations": 72},
+{"author": "Author 27", "year": 2021, "title": "Study Title 27", "themes": ["A", "B", "C", "D", "E", "F", "G"], "citations": 258},
+{"author": "Author 28", "year": 2021, "title": "Study Title 28", "themes": ["B", "D"], "citations": 49},
+{"author": "Author 29", "year": 2021, "title": "Study Title 29", "themes": ["B", "F"], "citations": 27},
+{"author": "Author 30", "year": 2020, "title": "Study Title 30", "themes": ["B"], "citations": 14},
+{"author": "Author 31", "year": 2020, "title": "Study Title 31", "themes": ["C", "E", "F"], "citations": 27},
+{"author": "Author 32", "year": 2020, "title": "Study Title 32", "themes": ["E", "C"], "citations": 54},
+{"author": "Author 33", "year": 2020, "title": "Study Title 33", "themes": ["A", "B", "G"], "citations": 114},
+{"author": "Author 34", "year": 2020, "title": "Study Title 34", "themes": ["D", "B"], "citations": 45},
+{"author": "Author 35", "year": 2020, "title": "Study Title 35", "themes": ["D", "B", "G"], "citations": 202},
+{"author": "Author 36", "year": 2020, "title": "Study Title 36", "themes": ["C", "E"], "citations": 48},
+{"author": "Author 37", "year": 2020, "title": "Study Title 37", "themes": ["C"], "citations": 41},
+{"author": "Author 38", "year": 2020, "title": "Study Title 38", "themes": ["E", "D"], "citations": 15},
+{"author": "Author 39", "year": 2019, "title": "Study Title 39", "themes": ["D", "B"], "citations": 103},
+{"author": "Author 40", "year": 2019, "title": "Study Title 40", "themes": ["A", "B", "C", "E", "F", "G"], "citations": 439},
+{"author": "Author 41", "year": 2019, "title": "Study Title 41", "themes": ["A", "B"], "citations": 134},
+{"author": "Author 42", "year": 2019, "title": "Study Title 42", "themes": ["C", "A"], "citations": 31},
+{"author": "Author 43", "year": 2019, "title": "Study Title 43", "themes": ["B"], "citations": 19},
+{"author": "Author 44", "year": 2019, "title": "Study Title 44", "themes": ["C"], "citations": 47},
+{"author": "Author 45", "year": 2018, "title": "Study Title 45", "themes": ["B", "D"], "citations": 280},
+{"author": "Author 46", "year": 2018, "title": "Study Title 46", "themes": ["B"], "citations": 30},
+{"author": "Author 47", "year": 2018, "title": "Study Title 47", "themes": ["C", "E"], "citations": 48},
+{"author": "Author 48", "year": 2017, "title": "Study Title 48", "themes": ["B", "C"], "citations": 80},
+{"author": "Author 49", "year": 2017, "title": "Study Title 49", "themes": ["B", "E", "F"], "citations": 49},
+{"author": "Author 50", "year": 2016, "title": "Study Title 50", "themes": ["G", "B"], "citations": 148},
+{"author": "Author 51", "year": 2016, "title": "Study Title 51", "themes": ["D", "B"], "citations": 455},
+{"author": "Author 52", "year": 2016, "title": "Study Title 52", "themes": ["B", "D"], "citations": 311},
+{"author": "Author 53", "year": 2016, "title": "Study Title 53", "themes": ["D"], "citations": 205},
+{"author": "Author 54", "year": 2015, "title": "Study Title 54", "themes": ["D", "E", "F"], "citations": 79},
+{"author": "Author 55", "year": 2015, "title": "Study Title 55", "themes": ["B", "D"], "citations": 98}
+];
+
+const exampleThemeMap = {
+    "A": "Physics-Informed ML",
+    "B": "Personalized EP Calibration",
+    "C": "Surrogate/ROM Acceleration",
+    "D": "Arrhythmia Prediction",
+    "E": "EM Coupling via ML",
+    "F": "Multi-scale EP Modeling",
+    "G": "Uncertainty & Interpretability"
+};
+
+// Global variables
+let currentPaperData = [];
+let currentThemeMap = {};
+let themeColors = {};
+
+// Color generation function
+function generateColors(themes) {
+    const colors = {};
+    const hueStep = 360 / Object.keys(themes).length;
+    let hue = 0;
+    
+    Object.keys(themes).forEach(key => {
+        colors[key] = d3.hsl(hue, 0.7, 0.5).toString();
+        hue += hueStep;
+    });
+    
+    return colors;
+}
+
+// Validation functions
+function validateJSON(text, type) {
+    try {
+        const parsed = JSON.parse(text);
+        
+        if (type === 'paperData') {
+            if (!Array.isArray(parsed)) {
+                throw new Error('Paper data must be an array');
+            }
+            
+            parsed.forEach((paper, index) => {
+                if (!paper.author || !paper.title || !paper.themes || !Array.isArray(paper.themes)) {
+                    throw new Error(`Paper at index ${index} is missing required fields (author, title, themes)`);
+                }
+            });
+        } else if (type === 'themeMap') {
+            if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+                throw new Error('Theme map must be an object');
+            }
+        }
+        
+        return { valid: true, data: parsed };
+    } catch (error) {
+        return { valid: false, error: error.message };
+    }
+}
+
+function updateValidationStatus(inputId, statusId, validation) {
+    const input = document.getElementById(inputId);
+    const status = document.getElementById(statusId);
+    
+    if (validation.valid) {
+        input.classList.remove('error');
+        input.classList.add('success');
+        status.textContent = '✓ Valid JSON';
+        status.className = 'status-message success-message';
+    } else {
+        input.classList.remove('success');
+        input.classList.add('error');
+        status.textContent = '✗ ' + validation.error;
+        status.className = 'status-message error-message';
+    }
+    
+    updateGenerateButton();
+}
+
+function updateGenerateButton() {
+    const paperData = document.getElementById('paperDataInput').value.trim();
+    const themeMap = document.getElementById('themeMapInput').value.trim();
+    const generateBtn = document.getElementById('generateBtn');
+    
+    const paperValid = paperData && validateJSON(paperData, 'paperData').valid;
+    const themeValid = themeMap && validateJSON(themeMap, 'themeMap').valid;
+    
+    generateBtn.disabled = !(paperValid && themeValid);
+}
+
+// Event listeners for validation
+document.getElementById('paperDataInput').addEventListener('input', function() {
+    const validation = validateJSON(this.value, 'paperData');
+    updateValidationStatus('paperDataInput', 'paperDataStatus', validation);
+});
+
+document.getElementById('themeMapInput').addEventListener('input', function() {
+    const validation = validateJSON(this.value, 'themeMap');
+    updateValidationStatus('themeMapInput', 'themeMapStatus', validation);
+});
+
+// Load example data
+document.getElementById('loadExampleBtn').addEventListener('click', function() {
+    document.getElementById('paperDataInput').value = JSON.stringify(examplePaperData, null, 2);
+    document.getElementById('themeMapInput').value = JSON.stringify(exampleThemeMap, null, 2);
+    
+    // Trigger validation
+    document.getElementById('paperDataInput').dispatchEvent(new Event('input'));
+    document.getElementById('themeMapInput').dispatchEvent(new Event('input'));
+});
+
+// Generate visualization
+document.getElementById('generateBtn').addEventListener('click', function() {
+    const paperDataText = document.getElementById('paperDataInput').value;
+    const themeMapText = document.getElementById('themeMapInput').value;
+    
+    currentPaperData = JSON.parse(paperDataText).map((d, i) => ({...d, id: i}));
+    currentThemeMap = JSON.parse(themeMapText);
+    themeColors = generateColors(currentThemeMap);
+    
+    generateVisualization();
+});
+
+// Visualization functions
+function buildHierarchy(data, themeMap) {
+    const hierarchy = { name: "root", children: [] };
+    const themes = {};
+
+    Object.entries(themeMap).forEach(([key, value]) => {
+        themes[key] = { name: value, children: [] };
+        hierarchy.children.push(themes[key]);
+    });
+
+    data.forEach(paper => {
+        paper.themes.forEach(themeKey => {
+            if (themes[themeKey]) {
+                themes[themeKey].children.push({
+                    name: `${paper.author}`,
+                    paperId: paper.id,
+                    title: paper.title,
+                    themes: paper.themes,
+                    year: paper.year,
+                    citations: paper.citations
+                });
+            }
+        });
+    });
+    return hierarchy;
+}
+
+function generateVisualization() {
+    // Clear previous visualization
+    d3.select("#chart").selectAll("*").remove();
+    
+    // Show chart, hide placeholder
+    document.getElementById('placeholder').style.display = 'none';
+    document.getElementById('chart').style.display = 'block';
+    
+    const data = buildHierarchy(currentPaperData, currentThemeMap);
+    const width = 800;
+    const radius = width / 2;
+
+    const tree = d3.cluster()
+        .size([2 * Math.PI, radius - 100]);
+
+    const root = tree(d3.hierarchy(data)
+        .sort((a, b) => d3.ascending(a.data.name, b.data.name)));
+
+    const svg = d3.select("#chart")
+        .attr("viewBox", [-radius, -radius, width, width]);
+
+    const tooltip = d3.select("#tooltip");
+
+    // Create links between papers with shared themes
+    const links = [];
+    const paperNodes = root.leaves();
+    const paperMap = new Map();
+    
+    paperNodes.forEach(leaf => {
+        if (!paperMap.has(leaf.data.paperId)) {
+            paperMap.set(leaf.data.paperId, []);
+        }
+        paperMap.get(leaf.data.paperId).push(leaf);
+    });
+
+    for (const [paperId, nodes] of paperMap.entries()) {
+        if (nodes.length > 1) {
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    links.push({ source: nodes[i], target: nodes[j] });
+                }
+            }
+        }
+    }
+
+    const line = d3.lineRadial()
+        .curve(d3.curveBundle.beta(0.85))
+        .radius(d => d.y)
+        .angle(d => d.x);
+
+    // Draw links
+    const link = svg.append("g")
+        .attr("fill", "none")
+        .selectAll("path")
+        .data(links)
+        .join("path")
+        .attr("class", "link")
+        .attr("d", d => line(d.source.path(d.target)))
+        .style("stroke", d => {
+            const themeName = d.source.parent.data.name;
+            const themeKey = Object.keys(currentThemeMap).find(key => currentThemeMap[key] === themeName);
+            return themeColors[themeKey] || '#ccc';
+        })
+        .each(function(d) { d.path = this; });
+
+    // Draw paper nodes
+    const node = svg.append("g")
+        .selectAll("g")
+        .data(root.leaves())
+        .join("g")
+        .attr("class", "node node--leaf")
+        .attr("transform", d => `rotate(${d.x * 180 / Math.PI - 90}) translate(${d.y},0)`)
+        .on("mouseover", mouseovered)
+        .on("mouseout", mouseouted)
+        .on("mousemove", (event, d) => {
+            tooltip
+                .style("left", (event.pageX + 15) + "px")
+                .style("top", (event.pageY - 28) + "px");
+        });
+
+    node.append("text")
+        .attr("dy", "0.31em")
+        .attr("x", d => d.x < Math.PI ? 6 : -6)
+        .attr("text-anchor", d => d.x < Math.PI ? "start" : "end")
+        .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null)
+        .text(d => d.data.name)
+        .clone(true).lower()
+        .attr("stroke", "white");
+
+    // Draw theme labels
+    svg.append("g")
+        .selectAll("g")
+        .data(root.descendants().filter(d => d.depth === 1))
+        .join("g")
+        .attr("class", "node node--internal")
+        .attr("transform", d => `rotate(${d.x * 180 / Math.PI - 90}) translate(${d.y + 15},0)`)
+        .append("text")
+        .attr("dy", "0.31em")
+        .attr("x", d => d.x < Math.PI ? 6 : -6)
+        .attr("text-anchor", d => d.x < Math.PI ? "start" : "end")
+        .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null)
+        .text(d => d.data.name);
+
+    function mouseovered(event, d) {
+        tooltip.transition().duration(200).style("opacity", .95);
+        tooltip.html(`
+            <h3>${d.data.title}</h3>
+            <p><strong>Author:</strong> ${d.data.name}</p>
+            <p><strong>Year:</strong> ${d.data.year}</p>
+            <p><strong>Citations:</strong> ${d.data.citations}</p>
+            <p><strong>Themes:</strong> ${d.data.themes.map(t => currentThemeMap[t] || t).join(', ')}</p>
+        `);
+
+        d3.select(this).select("text").style("font-weight", "bold");
+
+        const connectedLinks = links.filter(l => l.source.data.paperId === d.data.paperId || l.target.data.paperId === d.data.paperId);
+        
+        d3.selectAll(".link").style("stroke-opacity", 0.05);
+        
+        connectedLinks.forEach(l => {
+            d3.select(l.path)
+              .style("stroke", "#ee9b00")
+              .style("stroke-opacity", 0.8)
+              .style("stroke-width", "2px")
+              .raise();
+        });
+    }
+
+    function mouseouted(event, d) {
+        tooltip.transition().duration(500).style("opacity", 0);
+
+        d3.selectAll(".link")
+          .style("stroke-opacity", 0.3)
+          .style("stroke-width", "1px")
+          .style("stroke", d => {
+              const themeName = d.source.parent.data.name;
+              const themeKey = Object.keys(currentThemeMap).find(key => currentThemeMap[key] === themeName);
+              return themeColors[themeKey] || '#ccc';
+          });
+
+        d3.selectAll(".node--leaf text").style("font-weight", null);
+    }
+}
+
+// Initialize
+updateGenerateButton();
+
+</script>
+
+</body>
+</html>
