@@ -10,86 +10,26 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            overflow-x: hidden;
-            background-color: #f8fafc;
-        }
-        #chart-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            min-height: 60vh;
-        }
-        svg {
-            width: 100%;
-            height: auto;
-            max-width: 800px;
-            font: 10px sans-serif;
-        }
-        path.link {
-            fill: none;
-            stroke-opacity: 0.3;
-        }
-        .node {
-            cursor: pointer;
-        }
-        .node:hover {
-            font-weight: bold;
-        }
-        .node--leaf text {
-            fill: #005f73;
-            font-size: 10px;
-        }
-        .node--internal text {
-            fill: #ca6702;
-            font-size: 12px;
-            font-weight: 700;
-            text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff;
-        }
-        #tooltip {
-            position: absolute;
-            background-color: white;
-            border: 1px solid #ccc;
-            border-radius: 8px;
-            padding: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.2s;
-            max-width: 300px;
-            font-size: 12px;
-            z-index: 1000;
-        }
-        #tooltip h3 {
-            font-size: 14px;
-            font-weight: bold;
-            margin-bottom: 4px;
-            color: #005f73;
-        }
-        .json-input {
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-        }
-        .error {
-            border-color: #ef4444 !important;
-            background-color: #fef2f2 !important;
-        }
-        .success {
-            border-color: #22c55e !important;
-            background-color: #f0fdf4 !important;
-        }
-        .status-message {
-            font-size: 12px;
-            margin-top: 4px;
-        }
-        .error-message {
-            color: #ef4444;
-        }
-        .success-message {
-            color: #22c55e;
-        }
+        body {font-family: 'Inter', sans-serif;overflow-x: hidden;background-color: #f8fafc;}
+        #chart-container { display: flex; justify-content: center; align-items: center; width: 100%; min-height: 60vh; }
+        svg { width: 100%; height: auto; max-width: 800px; font: 10px sans-serif;}
+        path.link {fill: none; stroke-opacity: 0.3;}
+        .node {cursor: pointer;}
+        .node:hover {font-weight: bold;}
+        .node--leaf text {fill: #005f73;font-size: 10px;}
+        .node--internal text {fill: #ca6702;font-size: 12px;font-weight: 700;text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff;}
+        .theme-arc {fill: none;stroke-width: 4;opacity: 0.7;cursor: pointer;}
+        .legend-item {cursor: pointer;}
+        .legend-rect {stroke: #333;stroke-width: 1;}
+        .legend-text {font-size: 11px;fill: #333;}
+        #tooltip {position: absolute;background-color: white;border: 1px solid #ccc;border-radius: 8px;padding: 12px;box-shadow: 0 4px 6px rgba(0,0,0,0.1);pointer-events: none;opacity: 0;transition: opacity 0.2s;max-width: 300px;font-size: 12px;z-index: 1000;}
+        #tooltip h3 {font-size: 14px;font-weight: bold;margin-bottom: 4px;color: #005f73;}
+        .json-input {font-family: 'Courier New', monospace;font-size: 12px;}
+        .error {border-color: #ef4444 !important;background-color: #fef2f2 !important;}
+        .success {border-color: #22c55e !important;background-color: #f0fdf4 !important;}
+        .status-message {font-size: 12px;margin-top: 4px;}
+        .error-message {color: #ef4444;}
+        .success-message {color: #22c55e;}
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
@@ -98,7 +38,6 @@
         <header class="text-center mb-8">
 
         </header>
-
 
         <div id="chart-container">
             <div id="placeholder" class="text-center text-gray-500 py-16">
@@ -165,74 +104,75 @@
         <div id="tooltip"></div>
     </div>
 
-<script>
+    <script>
+
 // Example data for loading
 const examplePaperData = [
-{ "author": "Author 1", "year": 2025, "title": "Study Title 1", "themes": ["E", "C", "D"], "citations": 0},
-{"author": "Author 2", "year": 2025, "title": "Study Title 2", "themes": ["E", "D", "G"], "citations": 0},
-{"author": "Author 3", "year": 2025, "title": "Study Title 3", "themes": ["C", "E"], "citations": 0},
-{"author": "Author 4", "year": 2025, "title": "Study Title 4", "themes": ["E", "F"], "citations": 0},
-{"author": "Author 5", "year": 2025, "title": "Study Title 5", "themes": ["D", "G"], "citations": 0},
-{"author": "Author 6", "year": 2024, "title": "Study Title 6", "themes": ["B", "D", "G"], "citations": 0},
-{"author": "Author 7", "year": 2024, "title": "Study Title 7", "themes": ["A", "B", "C"], "citations": 1},
-{"author": "Author 8", "year": 2024, "title": "Study Title 8", "themes": ["B", "G"], "citations": 0},
-{"author": "Author 9", "year": 2024, "title": "Study Title 9", "themes": ["D", "B"], "citations": 0},
-{"author": "Author 10", "year": 2023, "title": "Study Title 10", "themes": ["A", "B", "C"], "citations": 15},
-{"author": "Author 11", "year": 2023, "title": "Study Title 11", "themes": ["A", "B", "F"], "citations": 11},
-{"author": "Author 12", "year": 2023, "title": "Study Title 12", "themes": ["B", "D", "F"], "citations": 22},
-{"author": "Author 13", "year": 2023, "title": "Study Title 13", "themes": ["E", "F"], "citations": 23},
-{"author": "Author 14", "year": 2023, "title": "Study Title 14", "themes": ["C", "E"], "citations": 11},
-{"author": "Author 15", "year": 2023, "title": "Study Title 15", "themes": ["D"], "citations": 14},
-{"author": "Author 16", "year": 2022, "title": "Study Title 16", "themes": ["C", "E"], "citations": 45},
-{"author": "Author 17", "year": 2022, "title": "Study Title 17", "themes": ["A", "B"], "citations": 49},
-{"author": "Author 18", "year": 2022, "title": "Study Title 18", "themes": ["B", "G"], "citations": 11},
-{"author": "Author 19", "year": 2022, "title": "Study Title 19", "themes": ["D", "B", "F"], "citations": 18},
-{"author": "Author 20", "year": 2022, "title": "Study Title 20", "themes": ["C"], "citations": 16},
-{"author": "Author 21", "year": 2022, "title": "Study Title 21", "themes": ["B", "C"], "citations": 27},
-{"author": "Author 22", "year": 2021, "title": "Study Title 22", "themes": ["A", "B", "G"], "citations": 5},
-{"author": "Author 23", "year": 2021, "title": "Study Title 23", "themes": ["C", "D", "F"], "citations": 35},
-{"author": "Author 24", "year": 2021, "title": "Study Title 24", "themes": ["B", "G"], "citations": 22},
-{"author": "Author 25", "year": 2021, "title": "Study Title 25", "themes": ["B", "E"], "citations": 43},
-{"author": "Author 26", "year": 2021, "title": "Study Title 26", "themes": ["E", "F"], "citations": 72},
-{"author": "Author 27", "year": 2021, "title": "Study Title 27", "themes": ["A", "B", "C", "D", "E", "F", "G"], "citations": 258},
-{"author": "Author 28", "year": 2021, "title": "Study Title 28", "themes": ["B", "D"], "citations": 49},
-{"author": "Author 29", "year": 2021, "title": "Study Title 29", "themes": ["B", "F"], "citations": 27},
-{"author": "Author 30", "year": 2020, "title": "Study Title 30", "themes": ["B"], "citations": 14},
-{"author": "Author 31", "year": 2020, "title": "Study Title 31", "themes": ["C", "E", "F"], "citations": 27},
-{"author": "Author 32", "year": 2020, "title": "Study Title 32", "themes": ["E", "C"], "citations": 54},
-{"author": "Author 33", "year": 2020, "title": "Study Title 33", "themes": ["A", "B", "G"], "citations": 114},
-{"author": "Author 34", "year": 2020, "title": "Study Title 34", "themes": ["D", "B"], "citations": 45},
-{"author": "Author 35", "year": 2020, "title": "Study Title 35", "themes": ["D", "B", "G"], "citations": 202},
-{"author": "Author 36", "year": 2020, "title": "Study Title 36", "themes": ["C", "E"], "citations": 48},
-{"author": "Author 37", "year": 2020, "title": "Study Title 37", "themes": ["C"], "citations": 41},
-{"author": "Author 38", "year": 2020, "title": "Study Title 38", "themes": ["E", "D"], "citations": 15},
-{"author": "Author 39", "year": 2019, "title": "Study Title 39", "themes": ["D", "B"], "citations": 103},
-{"author": "Author 40", "year": 2019, "title": "Study Title 40", "themes": ["A", "B", "C", "E", "F", "G"], "citations": 439},
-{"author": "Author 41", "year": 2019, "title": "Study Title 41", "themes": ["A", "B"], "citations": 134},
-{"author": "Author 42", "year": 2019, "title": "Study Title 42", "themes": ["C", "A"], "citations": 31},
-{"author": "Author 43", "year": 2019, "title": "Study Title 43", "themes": ["B"], "citations": 19},
-{"author": "Author 44", "year": 2019, "title": "Study Title 44", "themes": ["C"], "citations": 47},
-{"author": "Author 45", "year": 2018, "title": "Study Title 45", "themes": ["B", "D"], "citations": 280},
-{"author": "Author 46", "year": 2018, "title": "Study Title 46", "themes": ["B"], "citations": 30},
-{"author": "Author 47", "year": 2018, "title": "Study Title 47", "themes": ["C", "E"], "citations": 48},
-{"author": "Author 48", "year": 2017, "title": "Study Title 48", "themes": ["B", "C"], "citations": 80},
-{"author": "Author 49", "year": 2017, "title": "Study Title 49", "themes": ["B", "E", "F"], "citations": 49},
-{"author": "Author 50", "year": 2016, "title": "Study Title 50", "themes": ["G", "B"], "citations": 148},
-{"author": "Author 51", "year": 2016, "title": "Study Title 51", "themes": ["D", "B"], "citations": 455},
-{"author": "Author 52", "year": 2016, "title": "Study Title 52", "themes": ["B", "D"], "citations": 311},
-{"author": "Author 53", "year": 2016, "title": "Study Title 53", "themes": ["D"], "citations": 205},
-{"author": "Author 54", "year": 2015, "title": "Study Title 54", "themes": ["D", "E", "F"], "citations": 79},
-{"author": "Author 55", "year": 2015, "title": "Study Title 55", "themes": ["B", "D"], "citations": 98}
+{"author": "#1", "year": 2025, "title": "Title #1", "themes": ["E", "C", "D"], "citations": 0},
+{"author": "#2", "year": 2025, "title": "Title #2", "themes": ["E", "D", "G"], "citations": 0},
+{"author": "#3", "year": 2025, "title": "Title #3", "themes": ["C", "E"], "citations": 0},
+{"author": "#4", "year": 2025, "title": "Title #4", "themes": ["E", "F"], "citations": 0},
+{"author": "#5", "year": 2025, "title": "Title #5", "themes": ["D", "G"], "citations": 0},
+{"author": "#6", "year": 2024, "title": "Title #6", "themes": ["B", "D", "G"], "citations": 0},
+{"author": "#7", "year": 2024, "title": "Title #7", "themes": ["A", "B", "C"], "citations": 1},
+{"author": "#8", "year": 2024, "title": "Title #8", "themes": ["B", "G"], "citations": 0},
+{"author": "#9", "year": 2024, "title": "Title #9", "themes": ["D", "B"], "citations": 0},
+{"author": "#10", "year": 2023, "title": "Title #10", "themes": ["A", "B", "C"], "citations": 15},
+{"author": "#11", "year": 2023, "title": "Title #11", "themes": ["A", "B", "F"], "citations": 11},
+{"author": "#12", "year": 2023, "title": "Title #12", "themes": ["B", "D", "F"], "citations": 22},
+{"author": "#13", "year": 2023, "title": "Title #13", "themes": ["E", "F"], "citations": 23},
+{"author": "#14", "year": 2023, "title": "Title #14", "themes": ["C", "E"], "citations": 11},
+{"author": "#15", "year": 2023, "title": "Title #15", "themes": ["D"], "citations": 14},
+{"author": "#16", "year": 2022, "title": "Title #16", "themes": ["C", "E"], "citations": 45},
+{"author": "#17", "year": 2022, "title": "Title #17", "themes": ["A", "B"], "citations": 49},
+{"author": "#18", "year": 2022, "title": "Title #18", "themes": ["B", "G"], "citations": 11},
+{"author": "#19", "year": 2022, "title": "Title #19", "themes": ["D", "B", "F"], "citations": 18},
+{"author": "#20", "year": 2022, "title": "Title #20", "themes": ["C"], "citations": 16},
+{"author": "#21", "year": 2022, "title": "Title #21", "themes": ["B", "C"], "citations": 27},
+{"author": "#22", "year": 2021, "title": "Title #22", "themes": ["A", "B", "G"], "citations": 5},
+{"author": "#23", "year": 2021, "title": "Title #23", "themes": ["C", "D", "F"], "citations": 35},
+{"author": "#24", "year": 2021, "title": "Title #24", "themes": ["B", "G"], "citations": 22},
+{"author": "#25", "year": 2021, "title": "Title #25", "themes": ["B", "E"], "citations": 43},
+{"author": "#26", "year": 2021, "title": "Title #26", "themes": ["E", "F"], "citations": 72},
+{"author": "#27", "year": 2021, "title": "Title #27", "themes": ["A", "B", "C", "D", "E", "F", "G"], "citations": 258},
+{"author": "#28", "year": 2021, "title": "Title #28", "themes": ["B", "D"], "citations": 49},
+{"author": "#29", "year": 2021, "title": "Title #29", "themes": ["B", "F"], "citations": 27},
+{"author": "#30", "year": 2020, "title": "Title #30", "themes": ["B"], "citations": 14},
+{"author": "#31", "year": 2020, "title": "Title #31", "themes": ["C", "E", "F"], "citations": 27},
+{"author": "#32", "year": 2020, "title": "Title #32", "themes": ["E", "C"], "citations": 54},
+{"author": "#33", "year": 2020, "title": "Title #33", "themes": ["A", "B", "G"], "citations": 114},
+{"author": "#34", "year": 2020, "title": "Title #34", "themes": ["D", "B"], "citations": 45},
+{"author": "#35", "year": 2020, "title": "Title #35", "themes": ["D", "B", "G"], "citations": 202},
+{"author": "#36", "year": 2020, "title": "Title #36", "themes": ["C", "E"], "citations": 48},
+{"author": "#37", "year": 2020, "title": "Title #37", "themes": ["C"], "citations": 41},
+{"author": "#38", "year": 2020, "title": "Title #38", "themes": ["E", "D"], "citations": 15},
+{"author": "#39", "year": 2019, "title": "Title #39", "themes": ["D", "B"], "citations": 103},
+{"author": "#40", "year": 2019, "title": "Title #40", "themes": ["A", "B", "C", "E", "F", "G"], "citations": 439},
+{"author": "#41", "year": 2019, "title": "Title #41", "themes": ["A", "B"], "citations": 134},
+{"author": "#42", "year": 2019, "title": "Title #42", "themes": ["C", "A"], "citations": 31},
+{"author": "#43", "year": 2019, "title": "Title #43", "themes": ["B"], "citations": 19},
+{"author": "#44", "year": 2019, "title": "Title #44", "themes": ["C"], "citations": 47},
+{"author": "#45", "year": 2018, "title": "Title #45", "themes": ["B", "D"], "citations": 280},
+{"author": "#46", "year": 2018, "title": "Title #46", "themes": ["B"], "citations": 30},
+{"author": "#47", "year": 2018, "title": "Title #47", "themes": ["C", "E"], "citations": 48},
+{"author": "#48", "year": 2017, "title": "Title #48", "themes": ["B", "C"], "citations": 80},
+{"author": "#49", "year": 2017, "title": "Title #49", "themes": ["B", "E", "F"], "citations": 49},
+{"author": "#50", "year": 2016, "title": "Title #50", "themes": ["G", "B"], "citations": 148},
+{"author": "#51", "year": 2016, "title": "Title #51", "themes": ["D", "B"], "citations": 455},
+{"author": "#52", "year": 2016, "title": "Title #52", "themes": ["B", "D"], "citations": 311},
+{"author": "#53", "year": 2016, "title": "Title #53", "themes": ["D"], "citations": 205},
+{"author": "#54", "year": 2015, "title": "Title #54", "themes": ["D", "E", "F"], "citations": 79},
+{"author": "#55", "year": 2015, "title": "Title #55", "themes": ["B", "D"], "citations": 98}
 ];
 
 const exampleThemeMap = {
-    "A": "Physics-Informed ML",
-    "B": "Personalized EP Calibration",
-    "C": "Surrogate/ROM Acceleration",
-    "D": "Arrhythmia Prediction",
-    "E": "EM Coupling via ML",
-    "F": "Multi-scale EP Modeling",
-    "G": "Uncertainty & Interpretability"
+ "A": "Physics-Informed ML",
+ "B": "Personalized EP Calibration",
+ "C": "Surrogate/ROM Acceleration",
+ "D": "Arrhythmia Prediction",
+ "E": "EM Coupling via ML",
+ "F": "Multi-scale EP Modeling",
+ "G": "Uncertainty & Interpretability"
 };
 
 // Global variables
@@ -384,7 +324,7 @@ function generateVisualization() {
     const radius = width / 2;
 
     const tree = d3.cluster()
-        .size([2 * Math.PI, radius - 100]);
+        .size([2 * Math.PI, radius - 120]);
 
     const root = tree(d3.hierarchy(data)
         .sort((a, b) => d3.ascending(a.data.name, b.data.name)));
@@ -436,6 +376,223 @@ function generateVisualization() {
         })
         .each(function(d) { d.path = this; });
 
+    // Calculate theme sectors and draw colored arcs
+    const themeNodes = root.descendants().filter(d => d.depth === 1);
+    const arcRadius = radius - 80;
+    
+    themeNodes.forEach((themeNode, i) => {
+        const themeKey = Object.keys(currentThemeMap).find(key => currentThemeMap[key] === themeNode.data.name);
+        const color = themeColors[themeKey] || '#ca6702';
+        
+        // Calculate the span of this theme's papers
+        const themeLeaves = themeNode.leaves();
+        if (themeLeaves.length === 0) return;
+        
+        const angles = themeLeaves.map(d => d.x);
+        const minAngle = Math.min(...angles);
+        const maxAngle = Math.max(...angles);
+        
+        // Add padding to the arc
+        const padding = 0.05;
+        const startAngle = minAngle - padding;
+        const endAngle = maxAngle + padding;
+        
+        // Draw colored arc
+        const arc = d3.arc()
+            .innerRadius(arcRadius)
+            .outerRadius(arcRadius)
+            .startAngle(startAngle)
+            .endAngle(endAngle);
+        
+        svg.append("path")
+            .datum({themeKey: themeKey, themeNode: themeNode})
+            .attr("class", "theme-arc")
+            .attr("d", arc())
+            .style("stroke", color)
+            .style("stroke-width", "4px")
+            .style("opacity", 0.7)
+            .style("cursor", "pointer")
+            .on("mouseover", function(event, d) {
+                // Highlight this arc
+                d3.select(this)
+                    .style("stroke", "#ee9b00")
+                    .style("stroke-width", "6px");
+                
+                // Find all papers belonging to this theme
+                const themePapers = d.themeNode.leaves().map(leaf => leaf.data.paperId);
+                
+                // Highlight all nodes belonging to this theme
+                svg.selectAll(".node--leaf")
+                    .filter(leaf => themePapers.includes(leaf.data.paperId))
+                    .select("text")
+                    .style("font-weight", "bold")
+                    .style("fill", "#ee9b00");
+                
+                // Highlight the corresponding legend item
+                svg.selectAll(".legend-item")
+                    .filter(function(legendData) { 
+                        return legendData.key === d.themeKey; 
+                    })
+                    .select("text")
+                    .style("font-weight", "bold");
+                
+                // Show only links between papers that share this specific theme
+                d3.selectAll(".link").style("stroke-opacity", 0.05);
+                
+                const themeSpecificLinks = links.filter(l => {
+                    const sourcePaper = currentPaperData.find(p => p.id === l.source.data.paperId);
+                    const targetPaper = currentPaperData.find(p => p.id === l.target.data.paperId);
+                    
+                    return sourcePaper && targetPaper && 
+                           sourcePaper.themes.includes(d.themeKey) && 
+                           targetPaper.themes.includes(d.themeKey);
+                });
+                
+                themeSpecificLinks.forEach(l => {
+                    d3.select(l.path)
+                      .style("stroke", "#ee9b00")
+                      .style("stroke-opacity", 0.8)
+                      .style("stroke-width", "2px")
+                      .raise();
+                });
+            })
+            .on("mouseout", function(event, d) {
+                // Reset arc style
+                d3.select(this)
+                    .style("stroke", color)
+                    .style("stroke-width", "4px");
+                
+                // Reset all node styles
+                svg.selectAll(".node--leaf text")
+                    .style("font-weight", null)
+                    .style("fill", "#005f73");
+                
+                // Reset legend items
+                svg.selectAll(".legend-item text")
+                    .style("font-weight", null);
+                
+                // Reset all link styles
+                d3.selectAll(".link")
+                  .style("stroke-opacity", 0.3)
+                  .style("stroke-width", "1px")
+                  .style("stroke", d => {
+                      const themeName = d.source.parent.data.name;
+                      const themeKey = Object.keys(currentThemeMap).find(key => currentThemeMap[key] === themeName);
+                      return themeColors[themeKey] || '#ccc';
+                  });
+            });
+    });
+
+    // Create legend in bottom right
+    const legendData = Object.entries(currentThemeMap).map(([key, value]) => ({
+        key: key,
+        name: value,
+        color: themeColors[key]
+    }));
+
+    const legend = svg.append("g")
+        .attr("class", "legend")
+        .attr("transform", `translate(${radius - 200}, ${radius - legendData.length * 10 - 20})`);
+
+    const legendItems = legend.selectAll(".legend-item")
+        .data(legendData)
+        .enter()
+        .append("g")
+        .attr("class", "legend-item")
+        .attr("transform", (d, i) => `translate(0, ${i * 20})`)
+        .style("cursor", "pointer")
+        .on("mouseover", function(event, d) {
+            // Highlight the arc for this theme
+            svg.selectAll(".theme-arc")
+                .filter(function(arcData) {
+                    return arcData.themeKey === d.key;
+                })
+                .style("stroke", "#ee9b00")
+                .style("stroke-width", "6px");
+
+            // Highlight papers belonging to this theme
+            const themeNode = themeNodes.find(node => {
+                const key = Object.keys(currentThemeMap).find(k => currentThemeMap[k] === node.data.name);
+                return key === d.key;
+            });
+            
+            if (themeNode) {
+                const themePapers = themeNode.leaves().map(leaf => leaf.data.paperId);
+                
+                svg.selectAll(".node--leaf")
+                    .filter(leaf => themePapers.includes(leaf.data.paperId))
+                    .select("text")
+                    .style("font-weight", "bold")
+                    .style("fill", "#ee9b00");
+
+                // Highlight links for this theme
+                d3.selectAll(".link").style("stroke-opacity", 0.05);
+                
+                const themeSpecificLinks = links.filter(l => {
+                    const sourcePaper = currentPaperData.find(p => p.id === l.source.data.paperId);
+                    const targetPaper = currentPaperData.find(p => p.id === l.target.data.paperId);
+                    
+                    return sourcePaper && targetPaper && 
+                           sourcePaper.themes.includes(d.key) && 
+                           targetPaper.themes.includes(d.key);
+                });
+                
+                themeSpecificLinks.forEach(l => {
+                    d3.select(l.path)
+                      .style("stroke", "#ee9b00")
+                      .style("stroke-opacity", 0.8)
+                      .style("stroke-width", "2px")
+                      .raise();
+                });
+            }
+
+            // Highlight legend text
+            d3.select(this).select("text").style("font-weight", "bold");
+        })
+        .on("mouseout", function(event, d) {
+            // Reset arc styles
+            svg.selectAll(".theme-arc")
+                .filter(function(arcData) {
+                    return arcData.themeKey === d.key;
+                })
+                .style("stroke", d.color)
+                .style("stroke-width", "4px");
+
+            // Reset all styles
+            svg.selectAll(".node--leaf text")
+                .style("font-weight", null)
+                .style("fill", "#005f73");
+
+            d3.selectAll(".link")
+              .style("stroke-opacity", 0.3)
+              .style("stroke-width", "1px")
+              .style("stroke", d => {
+                  const themeName = d.source.parent.data.name;
+                  const themeKey = Object.keys(currentThemeMap).find(key => currentThemeMap[key] === themeName);
+                  return themeColors[themeKey] || '#ccc';
+              });
+
+            // Reset legend text
+            d3.select(this).select("text").style("font-weight", null);
+        });
+
+    // Add colored rectangles for legend
+    legendItems.append("rect")
+        .attr("class", "legend-rect")
+        .attr("width", 12)
+        .attr("height", 12)
+        .attr("x", 0)
+        .attr("y", -6)
+        .style("fill", d => d.color);
+
+    // Add text labels for legend
+    legendItems.append("text")
+        .attr("class", "legend-text")
+        .attr("x", 18)
+        .attr("y", 0)
+        .attr("dy", "0.35em")
+        .text(d => d.name);
+
     // Draw paper nodes
     const node = svg.append("g")
         .selectAll("g")
@@ -459,20 +616,6 @@ function generateVisualization() {
         .text(d => d.data.name)
         .clone(true).lower()
         .attr("stroke", "white");
-
-    // Draw theme labels
-    svg.append("g")
-        .selectAll("g")
-        .data(root.descendants().filter(d => d.depth === 1))
-        .join("g")
-        .attr("class", "node node--internal")
-        .attr("transform", d => `rotate(${d.x * 180 / Math.PI - 90}) translate(${d.y + 15},0)`)
-        .append("text")
-        .attr("dy", "0.31em")
-        .attr("x", d => d.x < Math.PI ? 6 : -6)
-        .attr("text-anchor", d => d.x < Math.PI ? "start" : "end")
-        .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null)
-        .text(d => d.data.name);
 
     function mouseovered(event, d) {
         tooltip.transition().duration(200).style("opacity", .95);
@@ -518,7 +661,8 @@ function generateVisualization() {
 // Initialize
 updateGenerateButton();
 
-</script>
+
+    </script>
 
 </body>
 </html>
