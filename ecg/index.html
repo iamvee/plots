@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECG Cropper</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.2em;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 1em;
+        }
+        
+        .main-content {
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            min-height: 500px;
+        }
+        
+        .canvas-container {
+            flex: 3;
+            position: relative;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            background: #f8f9fa;
+            overflow: auto;
+            max-height: 600px;
+        }
+        
+        .side-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .panel-section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 18px;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .panel-section h3 {
+            color: #333;
+            margin-bottom: 12px;
+            font-size: 1.1em;
+        }
+        
+        .file-input-area {
+            text-align: center;
+            padding: 60px 40px;
+            border: 3px dashed #667eea;
+            border-radius: 12px;
+            background: white;
+            transition: all 0.3s;
+            cursor: pointer;
+            margin: 20px;
+        }
+        
+        .file-input-area:hover {
+            background: #f0f4ff;
+            border-color: #764ba2;
+        }
+        
+        .file-input-area.dragover {
+            background: #e8edff;
+            border-color: #764ba2;
+            transform: scale(1.02);
+        }
+        
+        .file-input-area h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.5em;
+        }
+        
+        #imageInput {
+            display: none;
+        }
+        
+        #mainCanvas {
+            display: block;
+            max-width: 100%;
+            cursor: crosshair;
+        }
+        
+        #mainCanvas.dragging-line {
+            cursor: move;
+        }
+        
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 11px 22px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95em;
+            transition: all 0.3s;
+            width: 100%;
+            margin: 4px 0;
+        }
+        
+        .button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        
+        .button.danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+        }
+        
+        .button.success {
+            background: linear-gradient(135deg, #00d2d3 0%, #00a8cc 100%);
+        }
+        
+        .button.secondary {
+            background: linear-gradient(135deg, #a29bfe 0%, #6c5ce7 100%);
+        }
+        
+        .status-box {
+            background: linear-gradient(135deg, #f0f4ff 0%, #e8edff 100%);
+            border: 1px solid #667eea;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 10px 0;
+        }
+        
+        .status-box h4 {
+            color: #667eea;
+            margin-bottom: 6px;
+            font-size: 1em;
+        }
+        
+        .status-box p {
+            color: #555;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+        
+        .grid-settings {
+            display: flex;
+            gap: 10px;
+            margin: 12px 0;
+        }
+        
+        .grid-settings input {
+            width: 55px;
+            padding: 7px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 0.95em;
+            text-align: center;
+        }
+        
+        .grid-settings label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #555;
+            font-weight: 500;
+            font-size: 0.9em;
+        }
+        
+        .preview-section {
+            display: none;
+            padding: 20px;
+            background: #f8f9fa;
+            border-top: 2px solid #e0e0e0;
+        }
+        
+        .preview-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        
+        .preview-grid {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .preview-group {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            border: 1px solid #ddd;
+        }
+        
+        .preview-group h4 {
+            color: #667eea;
+            margin-bottom: 12px;
+            font-size: 1.1em;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .preview-items {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+        }
+        
+        .preview-item {
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 8px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        
+        .preview-item:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .preview-item img {
+            width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            background: white;
+            cursor: pointer;
+        }
+        
+        .preview-item input {
+            width: 100%;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.85em;
+            text-align: center;
+            margin-bottom: 5px;
+        }
+        
+        .preview-item input:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+        
+        .preview-item .download-btn {
+            padding: 5px 10px;
+            font-size: 0.8em;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        
+        .preview-item .download-btn:hover {
+            background: #764ba2;
+        }
+        
+        .instructions {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 10px 0;
+            font-size: 0.85em;
+            color: #856404;
+        }
+        
+        .line-info {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 10px;
+            padding: 8px;
+            background: white;
+            border-radius: 6px;
+        }
+        
+        .line-info div {
+            margin: 3px 0;
+        }
+        
+        .line-color {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+        
+        .progress-indicator {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 40px;
+        }
+        
+        .progress-step {
+            flex: 1;
+            text-align: center;
+            position: relative;
+        }
+        
+        .progress-step::before {
+            content: '';
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            width: 100%;
+            height: 2px;
+            background: #e0e0e0;
+            z-index: -1;
+        }
+        
+        .progress-step:last-child::before {
+            display: none;
+        }
+        
+        .progress-step.active .step-circle {
+            background: #667eea;
+            color: white;
+        }
+        
+        .progress-step.completed .step-circle {
+            background: #00d2d3;
+            color: white;
+        }
+        
+        .step-circle {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #e0e0e0;
+            color: #999;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .step-label {
+            font-size: 0.85em;
+            color: #666;
+        }
+        
+        .batch-controls {
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+        }
+        
+        .batch-controls input {
+            flex: 1;
+            padding: 8px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+        }
+        
+        .batch-controls button {
+            padding: 8px 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>ECG Cropper</h1>
+        </div>
+        
+        <div class="progress-indicator">
+            <div class="progress-step active" id="step1">
+                <div class="step-circle">1</div>
+                <div class="step-label">Load Image</div>
+            </div>
+            <div class="progress-step" id="step2">
+                <div class="step-circle">2</div>
+                <div class="step-label">Select Region</div>
+            </div>
+            <div class="progress-step" id="step3">
+                <div class="step-circle">3</div>
+                <div class="step-label">Adjust Grid</div>
+            </div>
+            <div class="progress-step" id="step4">
+                <div class="step-circle">4</div>
+                <div class="step-label">Review & Save</div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="canvas-container">
+                <div class="file-input-area" id="fileInputArea">
+                    <h3>📁 Load ECG Image</h3>
+                    <p>Drag and drop or click to select</p>
+                    <p style="margin-top: 10px; font-size: 0.9em; opacity: 0.7;">Supports: JPG, PNG, GIF</p>
+                    <input type="file" id="imageInput" accept="image/*">
+                </div>
+                <canvas id="mainCanvas" style="display: none;"></canvas>
+            </div>
+            
+            <div class="side-panel">
+                <div class="panel-section">
+                    <h3>📋 Status</h3>
+                    <div class="status-box">
+                        <h4 id="currentStepTitle">Step 1: Load Image</h4>
+                        <p id="currentStepDesc">Select an ECG image file to begin.</p>
+                    </div>
+                    <div class="instructions" id="instructions" style="display: none;">
+                        <strong>💡 Tip:</strong> <span id="instructionText"></span>
+                    </div>
+                </div>
+                
+                <div class="panel-section" id="gridPanel" style="display: none;">
+                    <h3>⚙️ Grid Settings</h3>
+                    <div class="grid-settings">
+                        <label>
+                            <span>Columns:</span>
+                            <input type="number" id="colCount" value="4" min="1" max="8">
+                        </label>
+                        <label>
+                            <span>12-Lead Rows:</span>
+                            <input type="number" id="leadRowCount" value="3" min="1" max="6">
+                        </label>
+                        <label>
+                            <span>Rhythm Strips:</span>
+                            <input type="number" id="rhythmCount" value="2" min="0" max="4">
+                        </label>
+                    </div>
+                    <button class="button secondary" onclick="applyGridSettings()">Apply Grid</button>
+                    
+                    <div class="line-info">
+                        <div><span class="line-color" style="background: #667eea;"></span>Vertical lines (12-lead columns)</div>
+                        <div><span class="line-color" style="background: #00a8cc;"></span>Horizontal lines (12-lead rows)</div>
+                        <div><span class="line-color" style="background: #ff6b6b;"></span>Divider (12-lead/rhythm separator)</div>
+                        <div><span class="line-color" style="background: #00d2d3;"></span>Rhythm strip dividers</div>
+                    </div>
+                </div>
+                
+                <div class="panel-section">
+                    <h3>🎮 Controls</h3>
+                    <button class="button" id="selectRegionBtn" onclick="startRegionSelection()" disabled>Select Region</button>
+                    <button class="button secondary" id="autoGridBtn" onclick="generateAutoGrid()" style="display: none;">Auto-Generate Grid</button>
+                    <button class="button danger" id="resetBtn" onclick="resetAll()" disabled>Reset All</button>
+                    <button class="button success" id="generateBtn" onclick="generateCrops()" style="display: none;">Generate Segments</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="preview-section" id="previewSection">
+            <h3>📊 ECG Segments Preview</h3>
+            
+            <div class="batch-controls">
+                <input type="text" id="filePrefix" placeholder="File prefix (e.g., patient_001)" value="ecg">
+                <button class="button success" onclick="downloadAllCrops()">📥 Download All</button>
+                <button class="button secondary" onclick="resetNames()">Reset Names</button>
+            </div>
+            
+            <div class="preview-grid" id="previewGrid"></div>
+        </div>
+    </div>
+
+    <script>
+        // ECG Lead Names
+        const ECG_LEADS = [
+            ['I', 'aVR', 'V1', 'V4'],
+            ['II', 'aVL', 'V2', 'V5'],
+            ['III', 'aVF', 'V3', 'V6']
+        ];
+        
+        // Global state
+        let state = {
+            currentStep: 1,
+            image: null,
+            canvas: null,
+            ctx: null,
+            region: null,
+            isSelectingRegion: false,
+            selectionStart: null,
+            verticalLines: [],
+            horizontalLeadLines: [],
+            leadRhythmDivider: null,
+            rhythmLines: [],
+            isDraggingLine: false,
+            draggedLine: null,
+            dragOffset: 0,
+            crops: [],
+            scale: 1
+        };
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeEventListeners();
+            updateUI();
+        });
+        
+        function initializeEventListeners() {
+            const fileInput = document.getElementById('imageInput');
+            const fileArea = document.getElementById('fileInputArea');
+            const canvas = document.getElementById('mainCanvas');
+            
+            // File input
+            fileInput.addEventListener('change', handleFileSelect);
+            fileArea.addEventListener('click', () => fileInput.click());
+            fileArea.addEventListener('dragover', handleDragOver);
+            fileArea.addEventListener('drop', handleDrop);
+            fileArea.addEventListener('dragleave', handleDragLeave);
+            
+            // Canvas events
+            canvas.addEventListener('mousedown', handleCanvasMouseDown);
+            canvas.addEventListener('mousemove', handleCanvasMouseMove);
+            canvas.addEventListener('mouseup', handleCanvasMouseUp);
+            canvas.addEventListener('mouseleave', handleCanvasMouseUp);
+        }
+        
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('dragover');
+        }
+        
+        function handleDragLeave(e) {
+            e.currentTarget.classList.remove('dragover');
+        }
+        
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                loadImage(files[0]);
+            }
+        }
+        
+        function handleFileSelect(e) {
+            const file = e.target.files[0];
+            if (file) {
+                loadImage(file);
+            }
+        }
+        
+        function loadImage(file) {
+            if (!file.type.startsWith('image/')) {
+                alert('Please select an image file');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    state.image = img;
+                    setupCanvas();
+                    moveToStep(2);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function setupCanvas() {
+            const canvas = document.getElementById('mainCanvas');
+            const container = document.querySelector('.canvas-container');
+            const fileArea = document.getElementById('fileInputArea');
+            
+            // Calculate scale to fit image in container
+            const maxWidth = container.clientWidth - 40;
+            const maxHeight = 600;
+            
+            let width = state.image.width;
+            let height = state.image.height;
+            
+            if (width > maxWidth || height > maxHeight) {
+                const widthRatio = maxWidth / width;
+                const heightRatio = maxHeight / height;
+                state.scale = Math.min(widthRatio, heightRatio);
+                width = width * state.scale;
+                height = height * state.scale;
+            } else {
+                state.scale = 1;
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            state.canvas = canvas;
+            state.ctx = canvas.getContext('2d');
+            
+            // Show canvas, hide file input
+            canvas.style.display = 'block';
+            fileArea.style.display = 'none';
+            
+            drawCanvas();
+        }
+        
+        function drawCanvas() {
+            if (!state.ctx || !state.image) return;
+            
+            const { ctx, canvas, image } = state;
+            
+            // Clear and draw image
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+            
+            // Draw region selection
+            if (state.region) {
+                ctx.strokeStyle = '#667eea';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.strokeRect(state.region.x, state.region.y, state.region.width, state.region.height);
+                ctx.setLineDash([]);
+                
+                // Draw grid lines
+                drawGridLines();
+            }
+            
+            // Draw selection in progress
+            if (state.isSelectingRegion && state.selectionStart) {
+                ctx.strokeStyle = 'rgba(102, 126, 234, 0.5)';
+                ctx.fillStyle = 'rgba(102, 126, 234, 0.1)';
+                ctx.lineWidth = 2;
+                
+                const rect = getCurrentSelectionRect();
+                ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+                ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+            }
+        }
+        
+        function drawGridLines() {
+            if (!state.region) return;
+            
+            const { ctx } = state;
+            
+            // Draw vertical lines (only in 12-lead area)
+            ctx.strokeStyle = '#667eea';
+            ctx.lineWidth = 2;
+            const topEnd = state.leadRhythmDivider || (state.region.y + state.region.height);
+            state.verticalLines.forEach((x) => {
+                ctx.beginPath();
+                ctx.moveTo(x, state.region.y);
+                ctx.lineTo(x, topEnd);
+                ctx.stroke();
+                
+                // Add handle
+                ctx.fillStyle = '#667eea';
+                ctx.fillRect(x - 4, state.region.y - 10, 8, 8);
+            });
+            
+            // Draw horizontal lines for 12-lead area
+            ctx.strokeStyle = '#00a8cc';
+            ctx.lineWidth = 2;
+            state.horizontalLeadLines.forEach((y) => {
+                ctx.beginPath();
+                ctx.moveTo(state.region.x, y);
+                ctx.lineTo(state.region.x + state.region.width, y);
+                ctx.stroke();
+                
+                // Add handle
+                ctx.fillStyle = '#00a8cc';
+                ctx.fillRect(state.region.x - 10, y - 4, 8, 8);
+                ctx.fillRect(state.region.x + state.region.width + 2, y - 4, 8, 8);
+            });
+            
+            // Draw lead/rhythm divider
+            if (state.leadRhythmDivider !== null) {
+                ctx.strokeStyle = '#ff6b6b';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(state.region.x, state.leadRhythmDivider);
+                ctx.lineTo(state.region.x + state.region.width, state.leadRhythmDivider);
+                ctx.stroke();
+                
+                // Add handle
+                ctx.fillStyle = '#ff6b6b';
+                ctx.fillRect(state.region.x - 10, state.leadRhythmDivider - 4, 8, 8);
+                ctx.fillRect(state.region.x + state.region.width + 2, state.leadRhythmDivider - 4, 8, 8);
+                
+                // Add label
+                ctx.fillStyle = '#ff6b6b';
+                ctx.font = 'bold 12px Arial';
+                ctx.fillText('12-Lead / Rhythm', state.region.x + 5, state.leadRhythmDivider - 5);
+            }
+            
+            // Draw rhythm strip dividers (horizontal only)
+            ctx.strokeStyle = '#00d2d3';
+            ctx.lineWidth = 2;
+            state.rhythmLines.forEach((y) => {
+                ctx.beginPath();
+                ctx.moveTo(state.region.x, y);
+                ctx.lineTo(state.region.x + state.region.width, y);
+                ctx.stroke();
+                
+                // Add handle
+                ctx.fillStyle = '#00d2d3';
+                ctx.fillRect(state.region.x - 10, y - 4, 8, 8);
+                ctx.fillRect(state.region.x + state.region.width + 2, y - 4, 8, 8);
+            });
+        }
+        
+        function handleCanvasMouseDown(e) {
+            const rect = state.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (state.isSelectingRegion) {
+                state.selectionStart = { x, y };
+                return;
+            }
+            
+            if (state.region) {
+                // Check if clicking on a line handle
+                const line = getLineAtPosition(x, y);
+                if (line) {
+                    state.isDraggingLine = true;
+                    state.draggedLine = line;
+                    state.dragOffset = line.type === 'vertical' ? x - line.value : y - line.value;
+                    state.canvas.classList.add('dragging-line');
+                }
+            }
+        }
+        
+        function handleCanvasMouseMove(e) {
+            const rect = state.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (state.isSelectingRegion && state.selectionStart) {
+                drawCanvas();
+            }
+            
+            if (state.isDraggingLine && state.draggedLine) {
+                const { type, index } = state.draggedLine;
+                
+                if (type === 'vertical') {
+                    const newX = Math.max(state.region.x, Math.min(x, state.region.x + state.region.width));
+                    state.verticalLines[index] = newX;
+                } else if (type === 'horizontal-lead') {
+                    const newY = Math.max(state.region.y, Math.min(y, state.leadRhythmDivider || (state.region.y + state.region.height)));
+                    state.horizontalLeadLines[index] = newY;
+                } else if (type === 'divider') {
+                    const newY = Math.max(state.region.y, Math.min(y, state.region.y + state.region.height));
+                    state.leadRhythmDivider = newY;
+                } else if (type === 'rhythm') {
+                    const newY = Math.max(state.leadRhythmDivider, Math.min(y, state.region.y + state.region.height));
+                    state.rhythmLines[index] = newY;
+                }
+                
+                // Sort lines
+                state.verticalLines.sort((a, b) => a - b);
+                state.horizontalLeadLines.sort((a, b) => a - b);
+                state.rhythmLines.sort((a, b) => a - b);
+                
+                drawCanvas();
+            }
+            
+            // Update cursor
+            if (state.region && !state.isSelectingRegion) {
+                const line = getLineAtPosition(x, y);
+                state.canvas.style.cursor = line ? 'move' : 'default';
+            }
+        }
+        
+        function handleCanvasMouseUp(e) {
+            if (state.isSelectingRegion && state.selectionStart) {
+                const rect = getCurrentSelectionRect();
+                if (rect.width > 20 && rect.height > 20) {
+                    state.region = rect;
+                    state.isSelectingRegion = false;
+                    state.selectionStart = null;
+                    moveToStep(3);
+                    generateAutoGrid();
+                }
+            }
+            
+            state.isDraggingLine = false;
+            state.draggedLine = null;
+            state.canvas.classList.remove('dragging-line');
+        }
+        
+        function getCurrentSelectionRect() {
+            if (!state.selectionStart) return null;
+            
+            const rect = state.canvas.getBoundingClientRect();
+            const currentX = event.clientX - rect.left;
+            const currentY = event.clientY - rect.top;
+            
+            return {
+                x: Math.min(state.selectionStart.x, currentX),
+                y: Math.min(state.selectionStart.y, currentY),
+                width: Math.abs(currentX - state.selectionStart.x),
+                height: Math.abs(currentY - state.selectionStart.y)
+            };
+        }
+        
+        function getLineAtPosition(x, y) {
+            const threshold = 10;
+            
+            // Check vertical lines
+            for (let i = 0; i < state.verticalLines.length; i++) {
+                const topEnd = state.leadRhythmDivider || (state.region.y + state.region.height);
+                if (Math.abs(x - state.verticalLines[i]) < threshold &&
+                    y >= state.region.y - 15 && y <= topEnd + 15) {
+                    return { type: 'vertical', index: i, value: state.verticalLines[i] };
+                }
+            }
+            
+            // Check horizontal lead lines
+            for (let i = 0; i < state.horizontalLeadLines.length; i++) {
+                if (Math.abs(y - state.horizontalLeadLines[i]) < threshold &&
+                    x >= state.region.x - 15 && x <= state.region.x + state.region.width + 15) {
+                    return { type: 'horizontal-lead', index: i, value: state.horizontalLeadLines[i] };
+                }
+            }
+            
+            // Check divider
+            if (state.leadRhythmDivider !== null) {
+                if (Math.abs(y - state.leadRhythmDivider) < threshold &&
+                    x >= state.region.x - 15 && x <= state.region.x + state.region.width + 15) {
+                    return { type: 'divider', value: state.leadRhythmDivider };
+                }
+            }
+            
+            // Check rhythm lines
+            for (let i = 0; i < state.rhythmLines.length; i++) {
+                if (Math.abs(y - state.rhythmLines[i]) < threshold &&
+                    x >= state.region.x - 15 && x <= state.region.x + state.region.width + 15) {
+                    return { type: 'rhythm', index: i, value: state.rhythmLines[i] };
+                }
+            }
+            
+            return null;
+        }
+        
+        function startRegionSelection() {
+            state.isSelectingRegion = true;
+            state.canvas.style.cursor = 'crosshair';
+            updateUI();
+        }
+        
+        function generateAutoGrid() {
+            if (!state.region) return;
+            
+            const cols = parseInt(document.getElementById('colCount').value);
+            const leadRows = parseInt(document.getElementById('leadRowCount').value);
+            const rhythmCount = parseInt(document.getElementById('rhythmCount').value);
+            
+            // Generate vertical lines (only for 12-lead area)
+            state.verticalLines = [];
+            const colWidth = state.region.width / cols;
+            for (let i = 1; i < cols; i++) {
+                state.verticalLines.push(state.region.x + i * colWidth);
+            }
+            
+            // Calculate areas
+            const totalHeight = state.region.height;
+            const leadAreaHeight = rhythmCount > 0 ? totalHeight * 0.75 : totalHeight;
+            const rhythmAreaHeight = totalHeight - leadAreaHeight;
+            
+            // Generate horizontal lines for 12-lead area
+            state.horizontalLeadLines = [];
+            const leadRowHeight = leadAreaHeight / leadRows;
+            for (let i = 1; i < leadRows; i++) {
+                state.horizontalLeadLines.push(state.region.y + i * leadRowHeight);
+            }
+            
+            // Set divider and rhythm lines
+            if (rhythmCount > 0) {
+                state.leadRhythmDivider = state.region.y + leadAreaHeight;
+                
+                // Generate rhythm strip dividers
+                state.rhythmLines = [];
+                const rhythmHeight = rhythmAreaHeight / rhythmCount;
+                for (let i = 1; i < rhythmCount; i++) {
+                    state.rhythmLines.push(state.leadRhythmDivider + i * rhythmHeight);
+                }
+            } else {
+                state.leadRhythmDivider = null;
+                state.rhythmLines = [];
+            }
+            
+            drawCanvas();
+            document.getElementById('generateBtn').style.display = 'block';
+        }
+        
+        function applyGridSettings() {
+            generateAutoGrid();
+        }
+        
+        function generateCrops() {
+            if (!state.region || !state.image) return;
+            
+            state.crops = [];
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Generate 12-lead crops
+            const leadVerticalLines = [state.region.x, ...state.verticalLines, state.region.x + state.region.width];
+            const leadHorizontalLines = [state.region.y, ...state.horizontalLeadLines];
+            if (state.leadRhythmDivider) {
+                leadHorizontalLines.push(state.leadRhythmDivider);
+            } else {
+                leadHorizontalLines.push(state.region.y + state.region.height);
+            }
+            
+            leadVerticalLines.sort((a, b) => a - b);
+            leadHorizontalLines.sort((a, b) => a - b);
+            
+            // Generate 12-lead segments
+            const cols = leadVerticalLines.length - 1;
+            for (let row = 0; row < leadHorizontalLines.length - 1; row++) {
+                for (let col = 0; col < cols; col++) {
+                    const x1 = leadVerticalLines[col] / state.scale;
+                    const y1 = leadHorizontalLines[row] / state.scale;
+                    const x2 = leadVerticalLines[col + 1] / state.scale;
+                    const y2 = leadHorizontalLines[row + 1] / state.scale;
+                    
+                    const width = x2 - x1;
+                    const height = y2 - y1;
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    
+                    ctx.drawImage(state.image, x1, y1, width, height, 0, 0, width, height);
+                    
+                    // Get ECG lead name
+                    let leadName = '';
+                    if (row < ECG_LEADS.length && col < ECG_LEADS[row].length) {
+                        leadName = ECG_LEADS[row][col];
+                    } else {
+                        leadName = `Lead_${row + 1}_${col + 1}`;
+                    }
+                    
+                    state.crops.push({
+                        dataURL: canvas.toDataURL('image/png'),
+                        type: '12-lead',
+                        row: row + 1,
+                        col: col + 1,
+                        leadName: leadName,
+                        filename: leadName
+                    });
+                }
+            }
+            
+            // Generate rhythm strips (full width)
+            if (state.leadRhythmDivider && state.rhythmLines.length >= 0) {
+                const rhythmHorizontalLines = [state.leadRhythmDivider, ...state.rhythmLines, state.region.y + state.region.height];
+                rhythmHorizontalLines.sort((a, b) => a - b);
+                
+                for (let i = 0; i < rhythmHorizontalLines.length - 1; i++) {
+                    const x1 = state.region.x / state.scale;
+                    const y1 = rhythmHorizontalLines[i] / state.scale;
+                    const x2 = (state.region.x + state.region.width) / state.scale;
+                    const y2 = rhythmHorizontalLines[i + 1] / state.scale;
+                    
+                    const width = x2 - x1;
+                    const height = y2 - y1;
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    
+                    ctx.drawImage(state.image, x1, y1, width, height, 0, 0, width, height);
+                    
+                    const rhythmName = `Rhythm_${i + 1}`;
+                    
+                    state.crops.push({
+                        dataURL: canvas.toDataURL('image/png'),
+                        type: 'rhythm',
+                        stripNumber: i + 1,
+                        leadName: rhythmName,
+                        filename: rhythmName
+                    });
+                }
+            }
+            
+            displayCrops();
+            moveToStep(4);
+        }
+        
+        function displayCrops() {
+            const container = document.getElementById('previewGrid');
+            container.innerHTML = '';
+            
+            // Group crops by type
+            const leadCrops = state.crops.filter(c => c.type === '12-lead');
+            const rhythmCrops = state.crops.filter(c => c.type === 'rhythm');
+            
+            // Display 12-lead crops
+            if (leadCrops.length > 0) {
+                const leadGroup = document.createElement('div');
+                leadGroup.className = 'preview-group';
+                leadGroup.innerHTML = '<h4>12-Lead ECG Segments</h4>';
+                
+                const leadItems = document.createElement('div');
+                leadItems.className = 'preview-items';
+                
+                leadCrops.forEach((crop, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'preview-item';
+                    item.innerHTML = `
+                        <img src="${crop.dataURL}" alt="${crop.leadName}" onclick="downloadSingle(${state.crops.indexOf(crop)})">
+                        <input type="text" id="name_${state.crops.indexOf(crop)}" value="${crop.filename}" onchange="updateFilename(${state.crops.indexOf(crop)}, this.value)">
+                        <button class="download-btn" onclick="downloadSingle(${state.crops.indexOf(crop)})">Download</button>
+                    `;
+                    leadItems.appendChild(item);
+                });
+                
+                leadGroup.appendChild(leadItems);
+                container.appendChild(leadGroup);
+            }
+            
+            // Display rhythm strips
+            if (rhythmCrops.length > 0) {
+                const rhythmGroup = document.createElement('div');
+                rhythmGroup.className = 'preview-group';
+                rhythmGroup.innerHTML = '<h4>Rhythm Strips</h4>';
+                
+                const rhythmItems = document.createElement('div');
+                rhythmItems.className = 'preview-items';
+                
+                rhythmCrops.forEach((crop, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'preview-item';
+                    item.innerHTML = `
+                        <img src="${crop.dataURL}" alt="${crop.leadName}" onclick="downloadSingle(${state.crops.indexOf(crop)})">
+                        <input type="text" id="name_${state.crops.indexOf(crop)}" value="${crop.filename}" onchange="updateFilename(${state.crops.indexOf(crop)}, this.value)">
+                        <button class="download-btn" onclick="downloadSingle(${state.crops.indexOf(crop)})">Download</button>
+                    `;
+                    rhythmItems.appendChild(item);
+                });
+                
+                rhythmGroup.appendChild(rhythmItems);
+                container.appendChild(rhythmGroup);
+            }
+            
+            document.getElementById('previewSection').style.display = 'block';
+        }
+        
+        function updateFilename(index, value) {
+            state.crops[index].filename = value;
+        }
+        
+        function downloadSingle(index) {
+            const crop = state.crops[index];
+            const prefix = document.getElementById('filePrefix').value || 'ecg';
+            const link = document.createElement('a');
+            link.download = `${prefix}_${crop.filename}.png`;
+            link.href = crop.dataURL;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        function downloadAllCrops() {
+            const prefix = document.getElementById('filePrefix').value || 'ecg';
+            state.crops.forEach((crop, index) => {
+                setTimeout(() => {
+                    const link = document.createElement('a');
+                    link.download = `${prefix}_${crop.filename}.png`;
+                    link.href = crop.dataURL;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }, index * 100);
+            });
+        }
+        
+        function resetNames() {
+            state.crops.forEach((crop, index) => {
+                const input = document.getElementById(`name_${index}`);
+                if (input) {
+                    input.value = crop.leadName;
+                    crop.filename = crop.leadName;
+                }
+            });
+        }
+        
+        function resetAll() {
+            state = {
+                currentStep: 1,
+                image: null,
+                canvas: null,
+                ctx: null,
+                region: null,
+                isSelectingRegion: false,
+                selectionStart: null,
+                verticalLines: [],
+                horizontalLeadLines: [],
+                leadRhythmDivider: null,
+                rhythmLines: [],
+                isDraggingLine: false,
+                draggedLine: null,
+                dragOffset: 0,
+                crops: [],
+                scale: 1
+            };
+            
+            document.getElementById('mainCanvas').style.display = 'none';
+            document.getElementById('fileInputArea').style.display = 'block';
+            document.getElementById('previewSection').style.display = 'none';
+            document.getElementById('imageInput').value = '';
+            
+            updateUI();
+        }
+        
+        function moveToStep(step) {
+            state.currentStep = step;
+            updateUI();
+        }
+        
+        function updateUI() {
+            // Update progress indicators
+            document.querySelectorAll('.progress-step').forEach((el, i) => {
+                if (i < state.currentStep) {
+                    el.classList.add('completed');
+                    el.classList.remove('active');
+                } else if (i === state.currentStep - 1) {
+                    el.classList.add('active');
+                    el.classList.remove('completed');
+                } else {
+                    el.classList.remove('active', 'completed');
+                }
+            });
+            
+            // Update status
+            const titles = [
+                'Step 1: Load Image',
+                'Step 2: Select Region',
+                'Step 3: Adjust Grid',
+                'Step 4: Review & Save'
+            ];
+            
+            const descriptions = [
+                'Select an ECG image file to begin.',
+                'Click and drag to select the main ECG plot area.',
+                'Drag lines to adjust. Red divider separates 12-lead from rhythm strips.',
+                'Review segments, edit names, and download individually or all at once.'
+            ];
+            
+            const instructions = [
+                '',
+                'Draw a rectangle around the entire ECG trace area.',
+                'Blue lines divide columns (12-lead only), cyan lines divide rows, red line separates 12-lead/rhythm.',
+                'Click images or use buttons to download. Edit names as needed.'
+            ];
+            
+            document.getElementById('currentStepTitle').textContent = titles[state.currentStep - 1];
+            document.getElementById('currentStepDesc').textContent = descriptions[state.currentStep - 1];
+            
+            if (instructions[state.currentStep - 1]) {
+                document.getElementById('instructions').style.display = 'block';
+                document.getElementById('instructionText').textContent = instructions[state.currentStep - 1];
+            } else {
+                document.getElementById('instructions').style.display = 'none';
+            }
+            
+            // Update buttons
+            document.getElementById('selectRegionBtn').disabled = state.currentStep !== 2;
+            document.getElementById('resetBtn').disabled = state.currentStep === 1;
+            document.getElementById('gridPanel').style.display = state.currentStep >= 3 ? 'block' : 'none';
+            document.getElementById('autoGridBtn').style.display = state.currentStep === 3 ? 'block' : 'none';
+            
+            // Update canvas cursor
+            if (state.canvas) {
+                if (state.isSelectingRegion) {
+                    state.canvas.style.cursor = 'crosshair';
+                } else if (state.currentStep >= 3) {
+                    state.canvas.style.cursor = 'default';
+                }
+            }
+        }
+    </script>
+</body>
+</html>
