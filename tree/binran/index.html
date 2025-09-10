@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Random 2D Binary Tree</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #f0f0f0; display: flex; }
+        canvas { display: block; background-color: #fff; border-radius: 12px; margin: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); cursor: grab; }
+        canvas:active { cursor: grabbing; }
+        .ui-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 300px;
+            height: calc(100vh - 40px);
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            overflow-y: auto;
+            color: #333;
+            z-index: 10;
+            user-select: none;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .ui-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .ui-section h2 {
+            margin-top: 0;
+            font-size: 1.25rem;
+            color: #555;
+            text-align: center;
+        }
+        label {
+            font-size: 0.9rem;
+            color: #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        input[type="number"] {
+            width: 100px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+        input[type="color"] {
+            width: 50px;
+            height: 25px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #tree-data {
+            flex-grow: 1;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 0.8rem;
+            color: #666;
+            margin: 0;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 10px;
+            background-color: #fafafa;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="treeCanvas"></canvas>
+    <div class="ui-panel">
+        <div class="ui-section">
+            <h2>Parameters</h2>
+            <label>
+                Initial Length (L):
+                <input type="number" id="initial-length" value="100" step="1">
+            </label>
+            <label>
+                Ratio (r):
+                <input type="number" id="ratio" value="0.7" step="0.1">
+            </label>
+            <label>
+                Threshold (t):
+                <input type="number" id="threshold" value="0.2" step="0.05">
+            </label>
+            <label>
+                Max Depth:
+                <input type="number" id="max-depth" value="10" step="1">
+            </label>
+            <label>
+                Branch Angle:
+                <input type="number" id="branch-angle" value="30" step="1">
+            </label>
+            <label>
+                Angle Variance:
+                <input type="number" id="angle-variance" value="15" step="1">
+            </label>
+            <label>
+                Start Color:
+                <input type="color" id="start-color" value="#8B4513">
+            </label>
+            <label>
+                End Color:
+                <input type="color" id="end-color" value="#228B22">
+            </label>
+            <button id="generate-button">Generate Tree</button>
+        </div>
+        <div class="ui-section" style="flex-grow: 1;">
+            <h2>Tree Node Data</h2>
+            <pre id="tree-data"></pre>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const canvas = document.getElementById('treeCanvas');
+            const ctx = canvas.getContext('2d');
+            const treeData = [];
+
+            let pan = { x: 0, y: 0 };
+            let zoom = 1.0;
+            let isDragging = false;
+            let lastMousePos = { x: 0, y: 0 };
+
+            function lerpColor(a, b, amount) {
+                const ah = parseInt(a.replace(/#/g, ''), 16),
+                    ar = ah >> 16, ag = ah >> 8 & 0xff, ab = ah & 0xff,
+                    bh = parseInt(b.replace(/#/g, ''), 16),
+                    br = bh >> 16, bg = bh >> 8 & 0xff, bb = bh & 0xff,
+                    rr = ar + amount * (br - ar),
+                    rg = ag + amount * (bg - ag),
+                    rb = ab + amount * (bb - ab);
+                return '#' + ((1 << 24) + (rr << 16) + (rg << 8) + rb | 0).toString(16).slice(1);
+            }
+
+            function init() {
+                onWindowResize();
+                window.addEventListener('resize', onWindowResize);
+                document.getElementById('generate-button').addEventListener('click', generateNewTree);
+                canvas.addEventListener('mousedown', onMouseDown);
+                canvas.addEventListener('mousemove', onMouseMove);
+                canvas.addEventListener('mouseup', onMouseUp);
+                canvas.addEventListener('wheel', onMouseWheel);
+                generateNewTree();
+            }
+
+            function generateNewTree() {
+                treeData.length = 0;
+                
+                const initialLength = parseFloat(document.getElementById('initial-length').value) || 100;
+                const ratio = parseFloat(document.getElementById('ratio').value) || 0.3;
+                const threshold = parseFloat(document.getElementById('threshold').value) || 0.7;
+                const maxDepth = parseInt(document.getElementById('max-depth').value) || 30;
+                const branchAngle = (parseFloat(document.getElementById('branch-angle').value) || 15) * Math.PI / 180;
+                const angleVariance = (parseFloat(document.getElementById('angle-variance').value) || 45) * Math.PI / 180;
+                const startColor = document.getElementById('start-color').value;
+                const endColor = document.getElementById('end-color').value;
+
+                generateTreeData(
+                    0, // depth
+                    canvas.width / 2, // start x
+                    canvas.height - 20, // start y
+                    -Math.PI / 2, // initial direction (up)
+                    initialLength,
+                    0, // parentElNum
+                    ratio,
+                    threshold,
+                    maxDepth,
+                    branchAngle,
+                    angleVariance,
+                    startColor,
+                    endColor
+                );
+
+                pan.x = 0;
+                pan.y = 0;
+                zoom = 1.0;
+
+                drawTree();
+
+                document.getElementById('tree-data').textContent = JSON.stringify(treeData, null, 2);
+            }
+
+            function generateTreeData(depth, startX, startY, angle, length, parentElNum, ratio, threshold, maxDepth, branchAngle, angleVariance, startColor, endColor) {
+                if (depth > maxDepth) {
+                    return;
+                }
+
+                const endX = startX + length * Math.cos(angle);
+                const endY = startY + length * Math.sin(angle);
+
+                treeData.push({
+                    type: 'branch',
+                    start: { x: startX, y: startY },
+                    end: { x: endX, y: endY },
+                    lineWidth: Math.max(1, 4 - depth * 0.5),
+                });
+
+                const elNum = parentElNum * 2 + 1;
+                const e1 = Math.floor(Math.random() * 100);
+                const e2 = Math.floor(Math.random() * 100);
+
+                const colorAmount = maxDepth > 0 ? depth / maxDepth : 0;
+                const nodeColor = lerpColor(startColor, endColor, colorAmount);
+
+                treeData.push({
+                    type: 'node',
+                    location: {
+                        x: endX.toFixed(2),
+                        y: endY.toFixed(2),
+                    },
+                    elnum: elNum,
+                    e1: e1,
+                    e2: e2,
+                    color: nodeColor
+                });
+
+                const newLength = length * (ratio + threshold * Math.random());
+
+                if (newLength > 1) {
+                    const leftAngle = angle + branchAngle + (Math.random() - 0.5) * angleVariance;
+                    generateTreeData(depth + 1, endX, endY, leftAngle, newLength, elNum, ratio, threshold, maxDepth, branchAngle, angleVariance, startColor, endColor);
+
+                    const rightAngle = angle - branchAngle - (Math.random() - 0.5) * angleVariance;
+                    generateTreeData(depth + 1, endX, endY, rightAngle, newLength, elNum, ratio, threshold, maxDepth, branchAngle, angleVariance, startColor, endColor);
+                }
+            }
+            
+            function drawTree() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.save();
+                ctx.translate(pan.x, pan.y);
+                ctx.scale(zoom, zoom);
+                ctx.lineCap = 'round';
+
+                treeData.forEach(item => {
+                    if (item.type === 'branch') {
+                        ctx.beginPath();
+                        ctx.moveTo(item.start.x, item.start.y);
+                        ctx.lineTo(item.end.x, item.end.y);
+                        ctx.lineWidth = item.lineWidth;
+                        ctx.strokeStyle = '#5c4238';
+                        ctx.stroke();
+                    } else if (item.type === 'node') {
+                        ctx.beginPath();
+                        ctx.arc(item.location.x, item.location.y, 3 / zoom, 0, 2 * Math.PI);
+                        ctx.fillStyle = item.color;
+                        ctx.fill();
+                    }
+                });
+
+                ctx.restore();
+            }
+            function onMouseDown(event) {
+                isDragging = true;
+                lastMousePos.x = event.clientX;
+                lastMousePos.y = event.clientY;
+            }
+
+            function onMouseMove(event) {
+                if (!isDragging) return;
+                const dx = event.clientX - lastMousePos.x;
+                const dy = event.clientY - lastMousePos.y;
+                pan.x += dx;
+                pan.y += dy;
+                lastMousePos.x = event.clientX;
+                lastMousePos.y = event.clientY;
+                drawTree();
+            }
+
+            function onMouseUp() {
+                isDragging = false;
+            }
+
+            function onMouseWheel(event) {
+                event.preventDefault(); 
+                const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
+                const mouseX = event.clientX - canvas.getBoundingClientRect().left;
+                const mouseY = event.clientY - canvas.getBoundingClientRect().top;
+                pan.x = mouseX - (mouseX - pan.x) * zoomFactor;
+                pan.y = mouseY - (mouseY - pan.y) * zoomFactor;
+                zoom *= zoomFactor;
+                drawTree();
+            }
+
+            function onWindowResize() {
+                const canvasContainer = canvas.parentElement;
+                canvas.width = window.innerWidth - 350;
+                canvas.height = window.innerHeight - 40;
+                drawTree(); 
+            }
+            window.onload = init;
+        })();
+    </script>
+</body>
+</html>
