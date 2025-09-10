@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Truss Analysis</title>
+    <style>
+        :root {
+            --primary-color: #667eea;
+            --secondary-color: #764ba2;
+            --danger-color: #f44336;
+            --success-color: #4CAF50;
+            --info-color: #2196F3;
+            --light-gray: #f0f0f0;
+            --dark-gray: #666;
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.98);
+            padding: 1rem 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 1.5rem;
+            margin-bottom: 0.75rem;
+            text-align: center;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .tool-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            padding: 0.5rem;
+            background: rgba(0,0,0,0.05);
+            border-radius: 8px;
+        }
+
+        button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.6rem 1.2rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            background: white;
+            color: #333;
+            border: 2px solid #e0e0e0;
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+            background-color: #f5f5f5;
+        }
+
+        button.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        button svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+        
+        #analyzeBtn { background-color: var(--success-color); color: white; border-color: var(--success-color); }
+        #clearBtn { background-color: var(--danger-color); color: white; border-color: var(--danger-color); }
+
+        .main-container {
+            flex: 1;
+            display: flex;
+            padding: 1rem;
+            gap: 1rem;
+            overflow: hidden;
+        }
+
+        .canvas-container {
+            flex: 3;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #resetViewBtn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 5;
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            border-radius: 50%;
+            border-color: #ccc;
+        }
+        #resetViewBtn svg {
+             width: 24px;
+            height: 24px;
+        }
+
+        .results-panel {
+            flex: 1;
+            min-width: 320px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .results-panel h2 {
+            color: #333;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+            border-bottom: 2px solid var(--light-gray);
+            padding-bottom: 0.5rem;
+        }
+
+        .member-result {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-radius: 6px;
+            background: #f9f9f9;
+            border-left: 5px solid #ccc;
+            transition: background-color 0.3s;
+        }
+        .member-result:hover { background-color: #f1f1f1; }
+        .member-result.tension { border-left-color: var(--success-color); background: #e8f5e9; }
+        .member-result.compression { border-left-color: var(--danger-color); background: #ffebee; }
+        .member-result.zero { border-left-color: var(--dark-gray); background: #fafafa; }
+        .member-result strong { display: block; margin-bottom: 0.25rem; }
+
+        .load-input, .support-input {
+            display: none;
+            position: absolute;
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        .load-input { border: 2px solid var(--primary-color); }
+        .support-input { border: 2px solid var(--info-color); display: none; flex-direction: column; gap: 0.5rem; }
+        .load-input h3, .support-input h3 { margin-bottom: 0.5rem; color: #333; }
+        .load-input input { width: 100px; padding: 0.25rem; margin: 0.25rem; border: 1px solid #ddd; border-radius: 4px; }
+        .load-input button, .support-input button { margin-top: 0.5rem; }
+        .support-input button { width: 100%; margin-top: 0; }
+        
+
+        .info-text, .error {
+            color: var(--dark-gray);
+            font-size: 0.9rem;
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background: var(--light-gray);
+            border-radius: 6px;
+            line-height: 1.5;
+        }
+        .error { color: var(--danger-color); background: #ffebee; }
+
+        .coordinates {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="toolbar">
+             <div class="tool-group">
+                <button id="undoBtn" title="Undo Last Action"><svg viewBox="0 0 24 24"><path d="M12.5 8C9.85 8 7.45 8.99 5.6 10.6L2 7V16H11L7.38 12.38C8.77 11.22 10.54 10.5 12.5 10.5C16.04 10.5 19.05 12.81 20.1 16L22.47 15.22C21.08 11.03 17.15 8 12.5 8Z"/></svg>Undo</button>
+            </div>
+            <div class="tool-group">
+                <button id="selectBtn" title="Select & Move"><svg viewBox="0 0 24 24"><path d="M13.6,19.34L15,20.75V22H9V20.75L10.4,19.34L6.5,15.43L2,20V4L9.5,11.5L13.13,7.86L12,6.75V2H18V6.75L16.88,7.86L22,13L13.6,19.34Z"/></svg>Select</button>
+                <button id="jointBtn" class="active" title="Add Joint"><svg viewBox="0 0 24 24"><path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/></svg>Joint</button>
+                <button id="memberBtn" title="Add Member"><svg viewBox="0 0 24 24"><path d="M22 12L18.83 14.5L19.23 18.2L16 16.5L12.77 18.2L12.37 14.5L9.2 12L12.37 9.5L12.77 5.8L16 7.5L19.23 5.8L18.83 9.5L22 12M4.8 12L1.63 9.5L2.03 5.8L5.2 7.5L8.43 5.8L8.83 9.5L12 12L8.83 14.5L8.43 18.2L5.2 16.5L2.03 18.2L1.63 14.5L4.8 12M5 12H19" stroke="currentColor" stroke-width="2" fill="none"/></svg>Member</button>
+                <button id="supportBtn" title="Add Support"><svg viewBox="0 0 24 24"><path d="M21.47,10.22L12.7,2.34C12.31,1.95 11.68,1.95 11.29,2.34L2.5,10.22C2,10.66 2.33,11.5 2.94,11.5H21C21.64,11.5 22,10.66 21.47,10.22M4,13V20H20V13H4Z"/></svg>Support</button>
+                <button id="loadBtn" title="Add Load"><svg viewBox="0 0 24 24"><path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12C22,11.3 21.93,10.62 21.82,10H15V12H21.77C21.42,16.03 18.39,19.34 14.5,19.91V17.26C16.89,16.69 18.84,14.76 19.41,12.38H14.5V10H19.95C19.5,6.88 17.12,4.43 14,4.05V6.75H12V4C12,2.89 12.9,2 14,2H17.29C16,2.62 14.8,3.53 13.82,4.68L15.24,6.1L12,9.34L8.76,6.1L10.18,4.68C9.2,3.53 8,2.62 6.71,2H10C11.11,2 12,2.9 12,4V6.75H10V4.05C6.88,4.43 4.5,6.88 4.05,10H10V12H4.59C5.16,14.76 7.11,16.69 9.5,17.26V19.91C5.61,19.34 2.58,16.03 2.23,12H9V10H2.18C2.07,10.62 2,11.3 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z" transform="rotate(90 12 12)"/></svg>Load</button>
+                <button id="deleteBtn" title="Delete Element"><svg viewBox="0 0 24 24"><path d="M9,3V4H4V6H5V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V6H20V4H15V3H9M7,6H17V19H7V6M9,8V17H11V8H9M13,8V17H15V8H13Z"/></svg>Delete</button>
+            </div>
+             <div class="tool-group">
+                <button id="saveBtn" title="Save to JSON file"><svg viewBox="0 0 24 24"><path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z"/></svg>Save</button>
+                <button id="loadJsonBtn" title="Load from JSON file"><svg viewBox="0 0 24 24"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M13,3.5L18.5,9H13V3.5M12,10L14.5,12.5L12,15V13H8V11H12V10Z"/></svg>Load JSON</button>
+                <button id="demoBtn" title="Load Demo Truss"><svg viewBox="0 0 24 24"><path d="M14.5,20.5L12,23L9.5,20.5L12,18L14.5,20.5M12,1C7,1 3,5 3,10C3,14.04 7.14,19.31 12,22.81C16.86,19.31 21,14.04 21,10C21,5 17,1 12,1M12,13A3,3 0 0,1 9,10A3,3 0 0,1 12,7A3,3 0 0,1 15,10A3,3 0 0,1 12,13Z"/></svg>Demo</button>
+                <input type="file" id="fileInput" accept=".json" style="display: none;">
+            </div>
+            <div class="tool-group">
+                <button id="clearBtn" title="Clear All"><svg viewBox="0 0 24 24"><path d="M19.36,2.72L20.78,4.14L15.06,9.85C16.13,11.39 16.28,13.24 15.38,14.44L9.06,8.12C10.26,7.22 12.11,7.37 13.65,8.44L19.36,2.72M5.93,17.57C3.54,15.18 2.05,12.24 2.05,9.75C2.05,9.75 2.05,9.75 2.05,9.74C2.05,7.2 3.53,4.24 5.92,1.86L7.33,3.27C5.35,5.24 4.05,7.73 4.05,9.74C4.05,11.75 5.35,14.24 7.34,16.22L5.93,17.57Z"/></svg></button>
+                <button id="analyzeBtn" title="Analyze Truss"><svg viewBox="0 0 24 24"><path d="M16.5,9.4L15.08,10.82L12,7.74L8.92,10.82L7.5,9.4L12,4.92L16.5,9.4M12,21.5L2,11.5L3.42,10.08L12,18.66L20.58,10.08L22,11.5L12,21.5Z"/></svg></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="canvas-container">
+            <canvas id="canvas"></canvas>
+            <div class="coordinates" id="coords">X: 0, Y: 0</div>
+            <button id="resetViewBtn" title="Reset View"><svg viewBox="0 0 24 24"><path d="M12,8C9.79,8 8,9.79 8,12C8,14.21 9.79,16 12,16C14.21,16 16,14.21 16,12C16,9.79 14.21,8 12,8M12,20C7.58,20 4,16.42 4,12C4,7.58 7.58,4 12,4C16.42,4 20,7.58 20,12C20,16.42 16.42,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z"/></svg></button>
+        </div>
+        
+        <div class="results-panel">
+            <h2>Analysis Results</h2>
+            <div id="results"></div>
+        </div>
+    </div>
+
+    <div class="load-input" id="loadInput">
+        <h3>Enter Load (kN)</h3>
+        <div>
+            <label>X: <input type="number" id="loadX" value="0"></label>
+            <label>Y: <input type="number" id="loadY" value="-10"></label>
+        </div>
+        <button onclick="applyLoad()">Apply</button>
+        <button onclick="cancelLoad()">Cancel</button>
+    </div>
+
+    <div class="support-input" id="supportInput">
+        <h3>Select Support Type</h3>
+        <button onclick="applySupport('fixed')">Fixed</button>
+        <button onclick="applySupport('roller-v')">Vertical Roller</button>
+        <button onclick="applySupport('roller-h')">Horizontal Roller</button>
+        <button onclick="removeSupport()" style="background-color: #fbe9e7; border-color: #ffab91;">Remove</button>
+        <button onclick="cancelSupport()">Cancel</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const coords = document.getElementById('coords');
+        
+        // State variables
+        let mode = 'joint';
+        let joints = [];
+        let members = [];
+        let supports = [];
+        let loads = [];
+        let selectedJoint = null;
+        let hoveredJoint = null;
+        let hoveredMember = null;
+        let mousePos = { x: 0, y: 0 };
+        let tempLoadJoint = null;
+        let tempSupportJoint = null;
+        let analysisResults = null;
+        
+        // History, Dragging, and View Transform State
+        let history = [];
+        const MAX_HISTORY = 50;
+        let isDragging = false;
+        let draggedJointIndex = null;
+        let dragOffset = { x: 0, y: 0 };
+        let dragStartPos = { x: 0, y: 0 };
+        let scale = 1.0;
+        const MIN_SCALE = 0.2, MAX_SCALE = 5.0;
+        let origin = { x: 0, y: 0 };
+        let isPanning = false;
+        let panStart = { x: 0, y: 0 };
+
+        const gridSize = 20;
+        
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            draw();
+        }
+        window.addEventListener('resize', resizeCanvas);
+        
+        // --- Coordinate Transformation ---
+        function screenToWorld(screenPos) {
+            return {
+                x: (screenPos.x - origin.x) / scale,
+                y: (screenPos.y - origin.y) / scale
+            };
+        }
+
+        function worldToScreen(worldPos) {
+             return {
+                x: worldPos.x * scale + origin.x,
+                y: worldPos.y * scale + origin.y
+            };
+        }
+        
+        function snapToGrid(x, y) {
+            const snappedX = Math.round(x / gridSize) * gridSize;
+            const snappedY = Math.round(y / gridSize) * gridSize;
+            return { x: snappedX, y: snappedY };
+        }
+        
+        function getJointAt(worldX, worldY) {
+            const threshold = 15 / scale; // Adjust threshold based on zoom
+            for(let i = joints.length - 1; i >= 0; i--) {
+                const j = joints[i];
+                if (Math.sqrt((j.x - worldX) ** 2 + (j.y - worldY) ** 2) < threshold) return j;
+            }
+            return null;
+        }
+
+        function getMemberAt(worldX, worldY) {
+            const threshold = 10 / scale;
+            for (let member of members) {
+                if (!joints[member.start] || !joints[member.end]) continue;
+                const j1 = joints[member.start], j2 = joints[member.end];
+                if (pointToLineDistance(worldX, worldY, j1.x, j1.y, j2.x, j2.y) < threshold) return member;
+            }
+            return null;
+        }
+
+        function pointToLineDistance(px, py, x1, y1, x2, y2) {
+            const dx = x2 - x1, dy = y2 - y1;
+            if (dx === 0 && dy === 0) return Math.sqrt((px-x1)**2 + (py-y1)**2);
+            const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx**2 + dy**2)));
+            return Math.sqrt((px - (x1 + t * dx))**2 + (py - (y1 + t * dy))**2);
+        }
+
+        // --- Event Listeners ---
+        canvas.addEventListener('mousedown', (e) => {
+            const worldPos = screenToWorld({x: e.offsetX, y: e.offsetY});
+            dragStartPos = worldPos;
+
+            if (e.button === 1 || (e.button === 0 && e.ctrlKey)) { // Middle mouse or Ctrl+Click for panning
+                isPanning = true;
+                panStart.x = e.clientX - origin.x;
+                panStart.y = e.clientY - origin.y;
+                canvas.style.cursor = 'grabbing';
+                e.preventDefault();
+                return;
+            }
+
+            if (mode === 'select') {
+                const joint = getJointAt(worldPos.x, worldPos.y);
+                if (joint) {
+                    isDragging = true;
+                    draggedJointIndex = joints.indexOf(joint);
+                    dragOffset.x = joint.x - worldPos.x;
+                    dragOffset.y = joint.y - worldPos.y;
+                    canvas.style.cursor = 'grabbing';
+                }
+            }
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (isPanning) {
+                isPanning = false;
+                canvas.style.cursor = 'crosshair';
+            }
+            if (isDragging) {
+                isDragging = false;
+                draggedJointIndex = null;
+                pushStateToHistory();
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            mousePos = { x: e.offsetX, y: e.offsetY };
+            const worldPos = screenToWorld(mousePos);
+            
+            coords.textContent = `X: ${Math.round(worldPos.x)}, Y: ${canvas.height - Math.round(worldPos.y)}`;
+
+            if (isPanning) {
+                origin.x = e.clientX - panStart.x;
+                origin.y = e.clientY - panStart.y;
+            } else if (isDragging && draggedJointIndex !== null) {
+                const newX = worldPos.x + dragOffset.x;
+                const newY = worldPos.y + dragOffset.y;
+                const snapped = snapToGrid(newX, newY);
+                joints[draggedJointIndex].x = snapped.x;
+                joints[draggedJointIndex].y = snapped.y;
+                analysisResults = null;
+            } else {
+                 hoveredJoint = getJointAt(worldPos.x, worldPos.y);
+                 hoveredMember = hoveredJoint ? null : getMemberAt(worldPos.x, worldPos.y);
+            }
+            
+            canvas.style.cursor = isPanning || isDragging ? 'grabbing' : (hoveredJoint || hoveredMember) ? 'pointer' : 'crosshair';
+            
+            draw();
+            
+            if (mode === 'member' && selectedJoint !== null) {
+                ctx.save();
+                ctx.translate(origin.x, origin.y);
+                ctx.scale(scale, scale);
+                ctx.beginPath(); ctx.strokeStyle = 'rgba(102, 126, 234, 0.5)'; ctx.lineWidth = 3 / scale;
+                ctx.setLineDash([5 / scale, 5 / scale]);
+                ctx.moveTo(joints[selectedJoint].x, joints[selectedJoint].y);
+                ctx.lineTo(worldPos.x, worldPos.y);
+                ctx.stroke(); ctx.setLineDash([]);
+                ctx.restore();
+            }
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomAmount = e.deltaY < 0 ? 1.1 : 0.9;
+            const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale * zoomAmount));
+            
+            const mouseWorldPos = screenToWorld({x: e.offsetX, y: e.offsetY});
+
+            origin.x = e.offsetX - mouseWorldPos.x * newScale;
+            origin.y = e.offsetY - mouseWorldPos.y * newScale;
+
+            scale = newScale;
+            draw();
+        });
+
+        canvas.addEventListener('click', (e) => {
+            if (e.button !== 0 || e.ctrlKey) return; // Only handle left clicks without ctrl
+            if (document.getElementById('loadInput').style.display !== 'none') cancelLoad();
+            if (document.getElementById('supportInput').style.display !== 'none') cancelSupport();
+
+            const worldPos = screenToWorld({x: e.offsetX, y: e.offsetY});
+            const snapped = snapToGrid(worldPos.x, worldPos.y);
+            const joint = getJointAt(worldPos.x, worldPos.y);
+            
+            let stateChanged = false;
+
+            switch (mode) {
+                case 'select': {
+                    const dist = Math.sqrt((worldPos.x - dragStartPos.x)**2 + (worldPos.y - dragStartPos.y)**2);
+                    if (joint && dist < 5 / scale) {
+                        const jointIndex = joints.indexOf(joint);
+                        const load = loads.find(l => l.joint === jointIndex);
+                        document.getElementById('loadX').value = load ? load.fx : 0;
+                        document.getElementById('loadY').value = load ? load.fy : 0;
+                        tempLoadJoint = jointIndex;
+                        document.getElementById('loadInput').style.cssText = `display: block; left: ${e.clientX + 5}px; top: ${e.clientY + 5}px;`;
+                    }
+                    break;
+                }
+                case 'joint': {
+                    const memberToSplit = getMemberAt(snapped.x, snapped.y);
+                    if (memberToSplit) {
+                        const oldMemberIndex = members.indexOf(memberToSplit);
+                        const { start, end } = members[oldMemberIndex];
+                        members.splice(oldMemberIndex, 1);
+                        joints.push({ x: snapped.x, y: snapped.y });
+                        const newJointIndex = joints.length - 1;
+                        members.push({ start: start, end: newJointIndex });
+                        members.push({ start: newJointIndex, end: end });
+                    } else if (!getJointAt(snapped.x, snapped.y)) {
+                        joints.push({ x: snapped.x, y: snapped.y });
+                    }
+                    stateChanged = true;
+                    break;
+                }
+                case 'member':
+                    if (joint) {
+                        const jointIndex = joints.indexOf(joint);
+                        if (selectedJoint === null) selectedJoint = jointIndex;
+                        else {
+                            if (selectedJoint !== jointIndex && !members.some(m => (m.start === selectedJoint && m.end === jointIndex) || (m.end === selectedJoint && m.start === jointIndex))) {
+                                members.push({ start: selectedJoint, end: jointIndex });
+                                stateChanged = true;
+                            }
+                            selectedJoint = null;
+                        }
+                    }
+                    break;
+                case 'support':
+                    if (joint) {
+                        tempSupportJoint = joints.indexOf(joint);
+                        document.getElementById('supportInput').style.cssText = `display: flex; left: ${e.clientX + 5}px; top: ${e.clientY + 5}px;`;
+                    }
+                    break;
+                case 'load':
+                    if (joint) {
+                        tempLoadJoint = joints.indexOf(joint);
+                        document.getElementById('loadInput').style.cssText = `display: block; left: ${e.clientX + 5}px; top: ${e.clientY + 5}px;`;
+                    }
+                    break;
+                case 'delete':
+                    if (joint) { deleteJoint(joints.indexOf(joint)); stateChanged = true; }
+                    else {
+                        const member = getMemberAt(worldPos.x, worldPos.y);
+                        if (member) { members.splice(members.indexOf(member), 1); stateChanged = true; }
+                    }
+                    break;
+            }
+            if (stateChanged) pushStateToHistory();
+            draw();
+        });
+
+        function deleteJoint(idx) {
+            members = members.filter(m => m.start !== idx && m.end !== idx);
+            supports = supports.filter(s => s.joint !== idx);
+            loads = loads.filter(l => l.joint !== idx);
+            joints.splice(idx, 1);
+            members.forEach(m => { if (m.start > idx) m.start--; if (m.end > idx) m.end--; });
+            supports.forEach(s => { if (s.joint > idx) s.joint--; });
+            loads.forEach(l => { if (l.joint > idx) l.joint--; });
+        }
+        
+        // --- Toolbar and Button Logic ---
+        function setMode(newMode) {
+            mode = newMode; selectedJoint = null;
+            document.querySelectorAll('.toolbar button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`${newMode}Btn`).classList.add('active');
+            cancelLoad(); cancelSupport(); draw();
+        }
+        ['select', 'joint', 'member', 'support', 'load', 'delete'].forEach(m => {
+            document.getElementById(`${m}Btn`).addEventListener('click', () => setMode(m));
+        });
+
+        document.getElementById('undoBtn').addEventListener('click', undo);
+        document.getElementById('resetViewBtn').addEventListener('click', () => {
+            scale = 1.0; origin = { x: 0, y: 0 }; draw();
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            if (confirm("Are you sure? This will clear the entire canvas.")) {
+                joints = []; members = []; supports = []; loads = [];
+                selectedJoint = null; analysisResults = null;
+                pushStateToHistory(); draw(); updateResults();
+            }
+        });
+        
+        document.getElementById('analyzeBtn').addEventListener('click', analyzeTruss);
+        
+        // --- Load/Save/Demo Logic ---
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            const dataStr = JSON.stringify({ joints, members, supports, loads }, null, 2);
+            const blob = new Blob([dataStr], {type: "application/json"});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob); a.download = "truss-design.json";
+            a.click(); URL.revokeObjectURL(a.href);
+        });
+
+        document.getElementById('loadJsonBtn').addEventListener('click', () => document.getElementById('fileInput').click());
+
+        document.getElementById('fileInput').addEventListener('change', (event) => {
+            const file = event.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.joints && data.members) {
+                        joints = data.joints; members = data.members; 
+                        supports = data.supports || []; loads = data.loads || [];
+                        analysisResults = null; pushStateToHistory(); draw(); updateResults();
+                    } else { alert("Invalid JSON file format."); }
+                } catch (err) { alert("Error parsing JSON file: " + err.message); }
+            };
+            reader.readAsText(file);
+            event.target.value = null;
+        });
+        
+        document.getElementById('demoBtn').addEventListener('click', () => {
+             const demoTruss = { "joints": [{ "x": 100, "y": 300 }, { "x": 300, "y": 300 }, { "x": 500, "y": 300 }, { "x": 200, "y": 140 }, { "x": 400, "y": 140 }], "members": [ {"start":0,"end":1}, {"start":1,"end":2}, {"start":3,"end":4}, {"start":0,"end":3}, {"start":1,"end":3}, {"start":1,"end":4}, {"start":2,"end":4} ], "supports": [ { "joint": 0, "type": "fixed" }, { "joint": 2, "type": "roller-v" } ], "loads": [ { "joint": 4, "fx": 0, "fy": 80 } ] };
+            joints = demoTruss.joints; members = demoTruss.members; supports = demoTruss.supports; loads = demoTruss.loads;
+            analysisResults = null; pushStateToHistory(); draw(); updateResults();
+        });
+
+        // --- History Management (Undo) ---
+        function pushStateToHistory() {
+            const state = { joints: JSON.parse(JSON.stringify(joints)), members: JSON.parse(JSON.stringify(members)), supports: JSON.parse(JSON.stringify(supports)), loads: JSON.parse(JSON.stringify(loads)) };
+            history.push(state);
+            if (history.length > MAX_HISTORY) history.shift();
+            updateUndoButtonState();
+        }
+        function undo() { if (history.length > 1) { history.pop(); restoreState(history[history.length - 1]); } }
+        function restoreState(state) {
+            joints = JSON.parse(JSON.stringify(state.joints)); members = JSON.parse(JSON.stringify(state.members)); supports = JSON.parse(JSON.stringify(state.supports)); loads = JSON.parse(JSON.stringify(state.loads));
+            analysisResults = null; draw(); updateResults(); updateUndoButtonState();
+        }
+        function updateUndoButtonState() { document.getElementById('undoBtn').disabled = history.length <= 1; }
+
+        // --- Popup Input Handlers ---
+        function applyLoad() {
+            if (tempLoadJoint === null) return;
+            const fx = parseFloat(document.getElementById('loadX').value) || 0;
+            const fy = parseFloat(document.getElementById('loadY').value) || 0;
+            const existingIdx = loads.findIndex(l => l.joint === tempLoadJoint);
+            if (existingIdx >= 0) {
+                if (fx === 0 && fy === 0) loads.splice(existingIdx, 1);
+                else { loads[existingIdx].fx = fx; loads[existingIdx].fy = fy; }
+            } else if (fx !== 0 || fy !== 0) { loads.push({ joint: tempLoadJoint, fx, fy }); }
+            pushStateToHistory(); cancelLoad(); draw();
+        }
+        function cancelLoad() { tempLoadJoint = null; document.getElementById('loadInput').style.display = 'none'; }
+        function applySupport(type) {
+            if (tempSupportJoint === null) return;
+            const supportIndex = supports.findIndex(s => s.joint === tempSupportJoint);
+            if (supportIndex > -1) supports[supportIndex].type = type;
+            else supports.push({ joint: tempSupportJoint, type: type });
+            pushStateToHistory(); cancelSupport();
+        }
+        function removeSupport() {
+            if (tempSupportJoint === null) return;
+            const supportIndex = supports.findIndex(s => s.joint === tempSupportJoint);
+            if (supportIndex > -1) supports.splice(supportIndex, 1);
+            pushStateToHistory(); cancelSupport();
+        }
+        function cancelSupport() { tempSupportJoint = null; document.getElementById('supportInput').style.display = 'none'; draw(); }
+        
+        // --- Drawing ---
+        function draw() {
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.translate(origin.x, origin.y); ctx.scale(scale, scale);
+            
+            drawGrid(); drawMembers(); drawSupports(); drawLoads(); drawJoints(); 
+            
+            ctx.restore();
+            drawTooltip();
+        }
+        function drawGrid() {
+            const worldTopLeft = screenToWorld({x: 0, y: 0});
+            const worldBottomRight = screenToWorld({x: canvas.width, y: canvas.height});
+            ctx.strokeStyle = '#f0f0f0'; ctx.lineWidth = 1 / scale;
+            
+            const startX = Math.floor(worldTopLeft.x / gridSize) * gridSize;
+            const endX = Math.ceil(worldBottomRight.x / gridSize) * gridSize;
+            const startY = Math.floor(worldTopLeft.y / gridSize) * gridSize;
+            const endY = Math.ceil(worldBottomRight.y / gridSize) * gridSize;
+            
+            for (let x = startX; x <= endX; x += gridSize) { ctx.beginPath(); ctx.moveTo(x, startY); ctx.lineTo(x, endY); ctx.stroke(); }
+            for (let y = startY; y <= endY; y += gridSize) { ctx.beginPath(); ctx.moveTo(startX, y); ctx.lineTo(endX, y); ctx.stroke(); }
+        }
+        function drawMembers() {
+            const maxForce = analysisResults ? analysisResults.maxAbsForce : 0;
+            members.forEach((member, id) => {
+                if (!joints[member.start] || !joints[member.end]) return;
+                const j1 = joints[member.start], j2 = joints[member.end];
+                let force = analysisResults ? analysisResults.memberForces[id] : undefined;
+                
+                if (force !== undefined) {
+                    if (Math.abs(force) < 1e-9) { ctx.strokeStyle = '#9E9E9E'; ctx.lineWidth = 2 / scale; }
+                    else { 
+                        const intensity = maxForce > 0 ? Math.min(Math.abs(force) / maxForce, 1) : 1;
+                        const lightness = 80 - (intensity * 30); // from 80% down to 50%
+                        ctx.strokeStyle = `hsl(${force > 0 ? 120 : 0}, 70%, ${lightness}%)`;
+                        ctx.lineWidth = (Math.min(intensity * 8 + 2, 10)) / scale;
+                    }
+                } else { ctx.strokeStyle = member === hoveredMember ? 'var(--primary-color)' : '#666'; ctx.lineWidth = (member === hoveredMember ? 5 : 3) / scale; }
+                ctx.beginPath(); ctx.moveTo(j1.x, j1.y); ctx.lineTo(j2.x, j2.y); ctx.stroke();
+            });
+        }
+        function drawSupports() {
+            supports.forEach(support => {
+                const joint = joints[support.joint]; if (!joint) return;
+                ctx.save(); ctx.translate(joint.x, joint.y);
+                ctx.fillStyle = 'var(--info-color)'; ctx.strokeStyle = '#333'; ctx.lineWidth = 2 / scale;
+                const size = 20 / scale;
+                if (support.type === 'fixed') { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-size*0.75, size); ctx.lineTo(size*0.75, size); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(-size, size); ctx.lineTo(size, size); ctx.stroke(); for (let i = -size; i <= size; i += size*0.3) { ctx.moveTo(i, size); ctx.lineTo(i - size*0.2, size + size*0.25); ctx.stroke(); } } 
+                else if (support.type === 'roller-v') { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-size*0.75, size); ctx.lineTo(size*0.75, size); ctx.closePath(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, size + size*0.2, size*0.2, 0, 2*Math.PI); ctx.fill(); ctx.beginPath(); ctx.moveTo(-size, size + size*0.4); ctx.lineTo(size, size + size*0.4); ctx.stroke(); }
+                else if (support.type === 'roller-h') { ctx.save(); ctx.rotate(-Math.PI / 2); ctx.translate(-size*1.2, 0); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-size*0.75, size); ctx.lineTo(size*0.75, size); ctx.closePath(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, size + size*0.2, size*0.2, 0, 2*Math.PI); ctx.fill(); ctx.beginPath(); ctx.moveTo(-size, size + size*0.4); ctx.lineTo(size, size + size*0.4); ctx.stroke(); ctx.restore(); }
+                ctx.restore();
+            });
+         }
+        function drawLoads() {
+            loads.forEach(load => {
+                const joint = joints[load.joint]; if(!joint) return; const visualScale = 5;
+                ctx.save(); ctx.translate(joint.x, joint.y);
+                ctx.strokeStyle = '#FF5722'; ctx.lineWidth = 3 / scale; ctx.fillStyle = '#FF5722';
+                const mag = Math.sqrt(load.fx ** 2 + load.fy ** 2);
+                if (mag > 0) { const ex = load.fx * visualScale, ey = load.fy * visualScale; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(ex, ey); ctx.stroke(); const angle = Math.atan2(ey, ex); const arrowSize = 10/scale; ctx.save(); ctx.translate(ex, ey); ctx.rotate(angle); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-arrowSize, -arrowSize/2); ctx.lineTo(-arrowSize, arrowSize/2); ctx.closePath(); ctx.fill(); ctx.restore(); }
+                ctx.restore();
+            });
+         }
+        function drawJoints() {
+            joints.forEach((joint, idx) => {
+                const radius = (joint === hoveredJoint ? 10 : 8) / scale;
+                ctx.fillStyle = idx === selectedJoint ? '#FFC107' : (joint === hoveredJoint ? 'var(--primary-color)' : '#333');
+                ctx.beginPath(); ctx.arc(joint.x, joint.y, radius, 0, 2*Math.PI); ctx.fill();
+                const fontSize = 10 / scale;
+                if (fontSize > 4) { // Don't draw text if too small
+                    ctx.fillStyle = '#fff'; ctx.font = `${fontSize}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    ctx.fillText(idx, joint.x, joint.y);
+                }
+            });
+        }
+        function drawTooltip() {
+            const worldPos = screenToWorld(mousePos);
+            let textLines = [];
+            if (hoveredJoint) { const i = joints.indexOf(hoveredJoint); textLines.push(`Joint ${i}`, `Coords: (${hoveredJoint.x}, ${canvas.height - hoveredJoint.y})`); const s = supports.find(s=>s.joint===i); if(s)textLines.push(`Support: ${s.type}`); const l = loads.find(l=>l.joint===i); if(l)textLines.push(`Load: (${l.fx}, ${l.fy}) kN`); }
+            else if (hoveredMember) { const i = members.indexOf(hoveredMember); textLines.push(`Member ${i} (J${hoveredMember.start}–J${hoveredMember.end})`); if (analysisResults && analysisResults.memberForces[i]!==undefined) { const f = analysisResults.memberForces[i]; const t = Math.abs(f)<1e-9 ? 'Zero' : f>0 ? 'Tension':'Compression'; textLines.push(`Force: ${Math.abs(f).toFixed(3)} kN (${t})`); } }
+            if (textLines.length > 0) { ctx.font = '12px var(--font-family)'; const p=8; let w = textLines.reduce((m,l)=>Math.max(m,ctx.measureText(l).width),0); const bW=w+p*2, bH=textLines.length*14+p*2; let bX=mousePos.x+15, bY=mousePos.y+15; if(bX+bW>canvas.width)bX=mousePos.x-bW-15; if(bY+bH>canvas.height)bY=mousePos.y-bH-15; ctx.fillStyle='rgba(0,0,0,0.8)'; ctx.fillRect(bX,bY,bW,bH); ctx.fillStyle='white'; ctx.textAlign='left'; ctx.textBaseline='top'; textLines.forEach((l,i)=>ctx.fillText(l, bX+p, bY+p+i*14)); }
+        }
+        // --- Analysis ---
+        function analyzeTruss() {
+            try {
+                const n = joints.length, m = members.length;
+                if (n === 0 || m === 0) throw new Error("Please create a truss with joints and members.");
+                let reactionsCount = supports.reduce((sum, s) => sum + (s.type === 'fixed' ? 2 : 1), 0);
+                const dof = 2 * n;
+                if (m + reactionsCount !== dof) { throw new Error(`System is statically ${m + reactionsCount > dof ? 'indeterminate' : 'unstable'}. (Eqs: ${m + reactionsCount}, Unknowns: ${dof})`); }
+                const A = Array(dof).fill(null).map(() => Array(m + reactionsCount).fill(0)); const b = Array(dof).fill(0);
+                members.forEach((member, midx) => { const j1=joints[member.start], j2=joints[member.end]; const dx=j2.x-j1.x, dy=j2.y-j1.y; const L=Math.sqrt(dx**2+dy**2); if (L<1e-9) throw new Error(`Member ${midx} has zero length.`); const cos=dx/L, sin=dy/L; A[2*member.start][midx]=-cos; A[2*member.start+1][midx]=-sin; A[2*member.end][midx]=cos; A[2*member.end+1][midx]=sin; });
+                let rIdx = m;
+                supports.forEach(s => { if (s.type === 'fixed') { A[2*s.joint][rIdx]=1; A[2*s.joint+1][rIdx+1]=1; rIdx+=2; } else if (s.type === 'roller-v') { A[2*s.joint+1][rIdx]=1; rIdx++; } else if (s.type === 'roller-h') { A[2*s.joint][rIdx]=1; rIdx++; } });
+                loads.forEach(load => { b[2*load.joint]=-load.fx; b[2*load.joint+1]=-load.fy; });
+                const forces = gaussianElimination(A, b);
+                if (!forces) throw new Error("Could not solve. The truss may be unstable or improperly constrained.");
+                const memberForces = forces.slice(0, m);
+                const maxAbsForce = memberForces.reduce((max, f) => Math.max(max, Math.abs(f)), 0);
+                analysisResults = { memberForces, reactions: forces.slice(m), maxAbsForce };
+                draw(); updateResults();
+            } catch (error) { document.getElementById('results').innerHTML = `<div class="error">${error.message}</div>`; analysisResults = null; draw(); }
+        }
+        function gaussianElimination(A, b) {
+            const n=A.length; if(n===0)return[]; const m=A[0].length; const aug=A.map((r,i)=>[...r, b[i]]);
+            for(let i=0;i<n;i++){ let max=i; for(let k=i+1;k<n;k++){if(Math.abs(aug[k][i])>Math.abs(aug[max][i]))max=k;} [aug[i],aug[max]]=[aug[max],aug[i]]; if(Math.abs(aug[i][i])<1e-10)continue; for(let k=i+1;k<n;k++){const f=aug[k][i]/aug[i][i]; for(let j=i;j<=m;j++)aug[k][j]-=f*aug[i][j];}}
+            const x=Array(m).fill(0); for(let i=n-1;i>=0;i--){if(Math.abs(aug[i][i])<1e-10)continue; let s=aug[i][m]; for(let j=i+1;j<m;j++)s-=aug[i][j]*x[j]; x[i]=s/aug[i][i];}
+            return x;
+         }
+        function updateResults() {
+            const resultsDiv = document.getElementById('results'); if (!analysisResults) { resultsDiv.innerHTML = `<div class="info-text">Build or load a truss, then click <strong>Analyze</strong>.</div>`; return; }
+            let html = '<h3>Member Forces</h3>';
+            analysisResults.memberForces.forEach((force, id) => { const member = members[id]; const type = Math.abs(force) < 1e-9 ? 'zero' : (force > 0 ? 'tension' : 'compression'); const typeText = type.charAt(0).toUpperCase() + type.slice(1); html += `<div class="member-result ${type}"><strong>Member ${id} (J${member.start}–J${member.end})</strong>${typeText}: ${Math.abs(force).toFixed(3)} kN</div>`; });
+            if (analysisResults.reactions.length > 0) { html += '<h3 style="margin-top: 1rem;">Support Reactions</h3>'; let rIdx = 0; supports.forEach(s => { html += `<div class="member-result"><strong>Support at J${s.joint} (${s.type})</strong>`; if (s.type === 'fixed') { html += `Rx: ${analysisResults.reactions[rIdx++].toFixed(3)} kN<br>Ry: ${analysisResults.reactions[rIdx++].toFixed(3)} kN`; } else if (s.type === 'roller-v') { html += `Ry: ${analysisResults.reactions[rIdx++].toFixed(3)} kN`; } else if (s.type === 'roller-h') { html += `Rx: ${analysisResults.reactions[rIdx++].toFixed(3)} kN`; } html += '</div>'; }); }
+            resultsDiv.innerHTML = html;
+        }
+        
+        // Initial setup
+        resizeCanvas();
+        setMode('joint');
+        pushStateToHistory(); 
+        updateUndoButtonState();
+        updateResults();
+
+    </script>
+</body>
+</html>
+
