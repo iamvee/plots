@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purkinje Mesh to OBJ Converter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .drop-zone {
+            border: 2px dashed #cbd5e1;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            text-align: center;
+            transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .drop-zone.dragover {
+            background-color: #e2e8f0;
+            border-color: #4f46e5;
+        }
+        .drop-zone.dropped {
+             background-color: #d1fae5;
+             border-color: #10b981;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4f46e5;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #surface-checkbox-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-5xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8">
+        <main>
+            <!-- Step 1: File Upload Section -->
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                <!-- Node File Drop Zone -->
+                <div>
+                    <h2 class="text-lg font-semibold mb-2 text-slate-700">1. Nodes File <span class="text-red-500">*</span></h2>
+                    <div id="node-drop-zone" class="drop-zone cursor-pointer">
+                        <p class="text-slate-500"><span id="node-drop-text">Drop `_node.txt` here</span></p>
+                        <input type="file" id="node-file-input" class="hidden" accept=".txt">
+                    </div>
+                </div>
+
+                <!-- Element File Drop Zone -->
+                <div>
+                    <h2 class="text-lg font-semibold mb-2 text-slate-700">2. Elements File <span class="text-red-500">*</span></h2>
+                     <div id="elem-drop-zone" class="drop-zone cursor-pointer">
+                        <p class="text-slate-500"><span id="elem-drop-text">Drop `_elem.txt` here</span></p>
+                        <input type="file" id="elem-file-input" class="hidden" accept=".txt">
+                    </div>
+                </div>
+
+                <!-- Surface File Drop Zone -->
+                <div>
+                    <h2 class="text-lg font-semibold mb-2 text-slate-700">3. Surfaces (Optional)</h2>
+                     <div id="surf-drop-zone" class="drop-zone cursor-pointer">
+                        <p class="text-slate-500"><span id="surf-drop-text">Drop `_surf.txt` here</span></p>
+                        <input type="file" id="surf-file-input" class="hidden" accept=".txt">
+                    </div>
+                </div>
+
+                <!-- Set File Drop Zone -->
+                <div>
+                    <h2 class="text-lg font-semibold mb-2 text-slate-700">4. Sets (Optional)</h2>
+                     <div id="set-drop-zone" class="drop-zone cursor-pointer">
+                        <p class="text-slate-500"><span id="set-drop-text">Drop `_set.txt` here</span></p>
+                        <input type="file" id="set-file-input" class="hidden" accept=".txt">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Step 2: Surface Selection -->
+            <div id="selection-container" class="hidden mb-6 text-center">
+                 <h2 class="text-lg font-semibold mb-3 text-slate-700">Select What to Convert for .OBJ</h2>
+                 <div class="inline-flex rounded-md shadow-sm mb-4" role="group">
+                    <input type="radio" id="radio-entire-model" name="selection-mode" value="entire" class="hidden" checked>
+                    <label for="radio-entire-model" class="px-4 py-2 text-sm font-medium text-slate-900 bg-white border border-slate-200 rounded-l-lg cursor-pointer hover:bg-slate-100 peer-checked:bg-indigo-600 peer-checked:text-white">Entire Model</label>
+
+                    <input type="radio" id="radio-select-surfaces" name="selection-mode" value="select" class="hidden">
+                    <label for="radio-select-surfaces" class="px-4 py-2 text-sm font-medium text-slate-900 bg-white border-t border-b border-r border-slate-200 rounded-r-lg cursor-pointer hover:bg-slate-100 peer-checked:bg-indigo-600 peer-checked:text-white">Select Surfaces</label>
+                 </div>
+
+                <div id="surface-checkbox-container" class="hidden w-full max-w-md mx-auto p-4 border border-slate-200 rounded-lg bg-slate-50 text-left">
+                     <div id="surface-checkbox-list" class="space-y-2">
+                        <!-- Checkboxes will be populated by JS -->
+                     </div>
+                </div>
+            </div>
+            
+            <!-- Step 3: Conversion Button -->
+            <div class="text-center mb-8">
+                 <button id="convert-btn" class="bg-indigo-600 text-white font-bold py-3 px-8 rounded-lg shadow-md hover:bg-indigo-700 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all duration-200" disabled>
+                    Convert Files
+                </button>
+            </div>
+
+            <!-- Step 4: Output/Download Section -->
+            <div id="output-section" class="hidden text-center bg-slate-100 p-6 rounded-lg">
+                 <div id="loader" class="mx-auto mb-4 hidden loader"></div>
+                 <div id="output-content" class="hidden">
+                    <h2 class="text-xl font-semibold text-slate-800 mb-2">Conversion Complete!</h2>
+                    <p class="text-slate-600 mb-4">Your files are ready for download.</p>
+                    <div class="flex flex-wrap justify-center items-center gap-4 mt-4">
+                        <a id="download-link-obj" class="bg-emerald-500 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-emerald-600 transition-all duration-200 inline-block">
+                            Download .obj File
+                        </a>
+                        <a id="download-link-inp" class="bg-sky-500 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-sky-600 transition-all duration-200 inline-block">
+                            Download .inp File
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error Message Box -->
+            <div id="error-box" class="hidden mt-6 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative" role="alert">
+                <strong class="font-bold">Error:</strong>
+                <span id="error-message" class="block sm:inline"></span>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Store file content
+        let nodeFileContent = null;
+        let elemFileContent = null;
+        let surfFileContent = null;
+        let setFileContent = null;
+        
+        // Parsed data
+        let parsedSurfaces = new Map();
+
+        // DOM elements
+        const nodeDropZone = document.getElementById('node-drop-zone');
+        const elemDropZone = document.getElementById('elem-drop-zone');
+        const surfDropZone = document.getElementById('surf-drop-zone');
+        const setDropZone = document.getElementById('set-drop-zone');
+        const nodeFileInput = document.getElementById('node-file-input');
+        const elemFileInput = document.getElementById('elem-file-input');
+        const surfFileInput = document.getElementById('surf-file-input');
+        const setFileInput = document.getElementById('set-file-input');
+        const nodeDropText = document.getElementById('node-drop-text');
+        const elemDropText = document.getElementById('elem-drop-text');
+        const surfDropText = document.getElementById('surf-drop-text');
+        const setDropText = document.getElementById('set-drop-text');
+        const selectionContainer = document.getElementById('selection-container');
+        const radioEntireModel = document.getElementById('radio-entire-model');
+        const radioSelectSurfaces = document.getElementById('radio-select-surfaces');
+        const surfaceCheckboxContainer = document.getElementById('surface-checkbox-container');
+        const surfaceCheckboxList = document.getElementById('surface-checkbox-list');
+        const convertBtn = document.getElementById('convert-btn');
+        const outputSection = document.getElementById('output-section');
+        const downloadLinkObj = document.getElementById('download-link-obj');
+        const downloadLinkInp = document.getElementById('download-link-inp');
+        const errorBox = document.getElementById('error-box');
+        const errorMessage = document.getElementById('error-message');
+        const loader = document.getElementById('loader');
+        const outputContent = document.getElementById('output-content');
+        
+        // --- Setup and File Handling ---
+
+        function setupDropZone(dropZone, fileInput, contentSetter, dropTextElement, fileType) {
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', (e) => {
+                 if (e.target.files.length) handleFile(e.target.files[0], contentSetter, dropTextElement, dropZone, fileType);
+            });
+            ['dragover', 'dragleave', 'drop'].forEach(eventName => dropZone.addEventListener(eventName, (e) => e.preventDefault()));
+            dropZone.addEventListener('dragover', () => dropZone.classList.add('dragover'));
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+            dropZone.addEventListener('drop', (e) => {
+                dropZone.classList.remove('dragover');
+                if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0], contentSetter, dropTextElement, dropZone, fileType);
+            });
+        }
+        
+        setupDropZone(nodeDropZone, nodeFileInput, (c) => nodeFileContent = c, nodeDropText, 'node');
+        setupDropZone(elemDropZone, elemFileInput, (c) => elemFileContent = c, elemDropText, 'element');
+        setupDropZone(surfDropZone, surfFileInput, (c) => surfFileContent = c, surfDropText, 'surface');
+        setupDropZone(setDropZone, setFileInput, (c) => setFileContent = c, setDropText, 'set');
+
+
+        function handleFile(file, contentSetter, textElement, dropZone, fileType) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                contentSetter(e.target.result);
+                textElement.textContent = `✅ ${file.name}`;
+                dropZone.classList.add('dropped');
+                if (fileType === 'surface') parseAndDisplaySurfaces();
+                checkFilesReady();
+            };
+            reader.onerror = () => showError(`Failed to read the ${fileType} file.`);
+            reader.readAsText(file);
+        }
+
+        function checkFilesReady() {
+            if (nodeFileContent && elemFileContent) convertBtn.disabled = false;
+        }
+        
+        function parseAndDisplaySurfaces() {
+            if (!surfFileContent) return;
+            try {
+                parsedSurfaces = parseSurfFile(surfFileContent);
+                surfaceCheckboxList.innerHTML = '';
+                if (parsedSurfaces.size > 0) {
+                    let count = 0;
+                    for (const surfaceName of parsedSurfaces.keys()) {
+                        const div = document.createElement('div');
+                        div.className = 'flex items-center';
+                        const checkbox = document.createElement('input');
+                        checkbox.id = `surf-check-${count}`;
+                        checkbox.type = 'checkbox';
+                        checkbox.value = surfaceName;
+                        checkbox.className = 'h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500';
+
+                        const label = document.createElement('label');
+                        label.htmlFor = `surf-check-${count}`;
+                        label.textContent = surfaceName;
+                        label.className = 'ml-3 block text-sm font-medium text-slate-700';
+
+                        div.appendChild(checkbox);
+                        div.appendChild(label);
+                        surfaceCheckboxList.appendChild(div);
+                        count++;
+                    }
+                    selectionContainer.classList.remove('hidden');
+                } else {
+                     selectionContainer.classList.add('hidden');
+                }
+            } catch (error) {
+                 showError(`Error parsing surface file: ${error.message}`);
+                 selectionContainer.classList.add('hidden');
+            }
+        }
+
+        radioEntireModel.addEventListener('change', () => surfaceCheckboxContainer.classList.add('hidden'));
+        radioSelectSurfaces.addEventListener('change', () => surfaceCheckboxContainer.classList.remove('hidden'));
+
+        // --- Parsing Logic ---
+
+        function parseSurfFile(content) {
+            const surfaces = new Map();
+            const lines = content.trim().split('\n');
+            let currentSurfaceName = null;
+            let currentSurfaceElements = [];
+
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (trimmedLine.toUpperCase().startsWith('*SURFACE')) {
+                    if (currentSurfaceName) surfaces.set(currentSurfaceName, currentSurfaceElements);
+                    const match = trimmedLine.match(/NAME=([\w-]+)/i);
+                    currentSurfaceName = match ? match[1] : `surface_${surfaces.size + 1}`;
+                    currentSurfaceElements = [];
+                } else if (currentSurfaceName && /^\d+,\s*S\d/i.test(trimmedLine)) {
+                    const parts = trimmedLine.split(',').map(p => p.trim());
+                    const elemId = parseInt(parts[0], 10);
+                    const faceId = parts[1].toUpperCase();
+                    if (!isNaN(elemId)) currentSurfaceElements.push({ elemId, faceId });
+                }
+            }
+            if (currentSurfaceName) surfaces.set(currentSurfaceName, currentSurfaceElements);
+            return surfaces;
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorBox.classList.remove('hidden');
+            outputSection.classList.add('hidden');
+        }
+
+        function hideError() { errorBox.classList.add('hidden'); }
+
+        // --- Main Conversion Logic ---
+
+        convertBtn.addEventListener('click', () => {
+            hideError();
+            outputContent.classList.add('hidden');
+            loader.classList.remove('hidden');
+            outputSection.classList.remove('hidden');
+
+            setTimeout(() => {
+                try {
+                    // --- .OBJ File Generation ---
+                    const nodeLines = nodeFileContent.trim().split('\n');
+                    const vertices = [];
+                    const nodeIdToIndexMap = new Map(); 
+                    
+                    for (let i = 0; i < nodeLines.length; i++) {
+                        const parts = nodeLines[i].trim().split(/[\s,]+/);
+                        if (parts.length >= 4) {
+                            const nodeId = parseInt(parts[0], 10);
+                            const [x, y, z] = parts.slice(1, 4).map(parseFloat);
+                            if (![nodeId, x, y, z].some(isNaN)) {
+                                vertices.push({ x, y, z });
+                                nodeIdToIndexMap.set(nodeId, i + 1);
+                            }
+                        }
+                    }
+                    if (vertices.length === 0) throw new Error("No valid vertices found.");
+
+                    let faces = [];
+                    let selectionName = "model";
+
+                    if (radioSelectSurfaces.checked && parsedSurfaces.size > 0) {
+                        const selectedSurfaces = Array.from(surfaceCheckboxList.querySelectorAll('input:checked')).map(cb => cb.value);
+                        if (selectedSurfaces.length === 0) throw new Error("Please select at least one surface to convert.");
+                        
+                        selectionName = selectedSurfaces.length > 1 ? 'combined_surfaces' : selectedSurfaces[0];
+                        const uniqueFaces = new Set();
+                        
+                        const elemIdToNodeIdsMap = new Map();
+                        const elemLines = elemFileContent.trim().split('\n');
+                        for (const line of elemLines) {
+                             const parts = line.trim().split(/[\s,]+/);
+                             if (parts.length >= 5) { // Needs at least corner nodes
+                                 const elemId = parseInt(parts[0], 10);
+                                 const nodeIds = parts.slice(1, 5).map(id => parseInt(id, 10));
+                                 if (!isNaN(elemId)) elemIdToNodeIdsMap.set(elemId, nodeIds);
+                             }
+                        }
+
+                        for (const surfaceName of selectedSurfaces) {
+                             const surfaceData = parsedSurfaces.get(surfaceName);
+                             for (const { elemId, faceId } of surfaceData) {
+                                const nodeIds = elemIdToNodeIdsMap.get(elemId);
+                                if (nodeIds) {
+                                    const indices = nodeIds.map(id => nodeIdToIndexMap.get(id));
+                                    if (indices.some(i => i === undefined)) continue;
+
+                                    let face;
+                                    switch (faceId) {
+                                        case 'S1': face = [indices[0], indices[1], indices[2]]; break;
+                                        case 'S2': face = [indices[0], indices[3], indices[1]]; break;
+                                        case 'S3': face = [indices[1], indices[3], indices[2]]; break;
+                                        case 'S4': face = [indices[2], indices[3], indices[0]]; break;
+                                        default: continue;
+                                    }
+                                    const faceKey = face.slice().sort((a, b) => a - b).join('/');
+                                    if (!uniqueFaces.has(faceKey)) {
+                                        uniqueFaces.add(faceKey);
+                                        faces.push(face);
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        const elemLines = elemFileContent.trim().split('\n');
+                        for (const line of elemLines) {
+                            const parts = line.trim().split(/[\s,]+/);
+                            if (parts.length >= 5) {
+                                const nodeIds = parts.slice(1, 5).map(id => parseInt(id, 10));
+                                const indices = nodeIds.map(id => nodeIdToIndexMap.get(id));
+                                if (indices.every(i => i !== undefined)) {
+                                    faces.push([indices[0], indices[1], indices[2]]);
+                                    faces.push([indices[0], indices[3], indices[1]]);
+                                    faces.push([indices[1], indices[3], indices[2]]);
+                                    faces.push([indices[2], indices[3], indices[0]]);
+                                }
+                            }
+                        }
+                    }
+                    if (faces.length === 0) throw new Error("No .obj faces could be generated.");
+
+                    let objContent = `# Generated by Advanced Mesh Converter\n`;
+                    objContent += `# Vertices: ${vertices.length}\n# Faces: ${faces.length}\n\n`;
+                    vertices.forEach(v => { objContent += `v ${v.x} ${v.y} ${v.z}\n`; });
+                    objContent += "\n";
+                    faces.forEach(f => { objContent += `f ${f[0]} ${f[1]} ${f[2]}\n`; });
+                    
+                    const objBlob = new Blob([objContent], { type: 'text/plain' });
+                    const objFileName = `${selectionName}.obj`;
+                    downloadLinkObj.href = URL.createObjectURL(objBlob);
+                    downloadLinkObj.download = objFileName;
+                    downloadLinkObj.textContent = `Download ${objFileName}`;
+
+                    // --- .INP File Generation ---
+                    const firstElemLine = elemFileContent.trim().split('\n')[0];
+                    const elemParts = firstElemLine.trim().split(/[\s,]+/);
+                    let elemType;
+                    if (elemParts.length === 5) {
+                        elemType = 'C3D4';
+                    } else if (elemParts.length === 11) {
+                        elemType = 'C3D10';
+                    } else {
+                        throw new Error(`Unsupported element type. Expected 5 or 11 columns in element file, but got ${elemParts.length}.`);
+                    }
+
+                    let inpContent = `*HEADING\nGenerated by Web Converter. Element Type: ${elemType}\n**\n`;
+                    inpContent += `*NODE\n${nodeFileContent.trim()}\n`;
+                    inpContent += `*ELEMENT, TYPE=${elemType}\n${elemFileContent.trim()}\n`;
+                    
+                    if (setFileContent) {
+                        inpContent += `\n${setFileContent.trim()}\n`;
+                    }
+
+                    if (surfFileContent) {
+                        const surfacesForInp = new Map();
+                        const surfLines = surfFileContent.trim().split('\n');
+                        let currentInpSurfaceName = null;
+
+                        for (const line of surfLines) {
+                            const trimmedLine = line.trim();
+                            if (trimmedLine.toUpperCase().startsWith('*SURFACE')) {
+                                const match = trimmedLine.match(/NAME=([\w-]+)/i);
+                                currentInpSurfaceName = match ? match[1] : `surface_${surfacesForInp.size + 1}`;
+                                if (!surfacesForInp.has(currentInpSurfaceName)) {
+                                    surfacesForInp.set(currentInpSurfaceName, new Map([
+                                        ['S1', []], ['S2', []], ['S3', []], ['S4', []]
+                                    ]));
+                                }
+                            } else if (currentInpSurfaceName && /^\d+,\s*S\d/i.test(trimmedLine)) {
+                                const parts = trimmedLine.split(',').map(p => p.trim());
+                                const elemId = parseInt(parts[0], 10);
+                                const faceId = parts[1].toUpperCase();
+                                if (!isNaN(elemId) && ['S1', 'S2', 'S3', 'S4'].includes(faceId)) {
+                                    surfacesForInp.get(currentInpSurfaceName).get(faceId).push(elemId);
+                                }
+                            }
+                        }
+
+                        let elsetsString = '';
+                        for (const [surfaceName, faces] of surfacesForInp.entries()) {
+                            for (const [faceId, elemIds] of faces.entries()) {
+                                if (elemIds.length > 0) {
+                                    elsetsString += `*ELSET, ELSET=_${surfaceName}_${faceId}\n`;
+                                    const lines = [];
+                                    for (let i = 0; i < elemIds.length; i += 16) {
+                                        const chunk = elemIds.slice(i, i + 16);
+                                        lines.push(chunk.join(', '));
+                                    }
+                                    elsetsString += lines.join('\n') + '\n';
+                                }
+                            }
+                        }
+                        
+                        let newSurfacesString = '';
+                        for (const [surfaceName, faces] of surfacesForInp.entries()) {
+                            newSurfacesString += `*Surface, type=ELEMENT, name=${surfaceName}\n`;
+                            for (const faceId of ['S1', 'S2', 'S3', 'S4']) {
+                                if (faces.get(faceId) && faces.get(faceId).length > 0) {
+                                    newSurfacesString += `_${surfaceName}_${faceId}, ${faceId}\n`;
+                                }
+                            }
+                        }
+                        
+                        if(elsetsString || newSurfacesString) {
+                            inpContent += '\n' + elsetsString.trim() + '\n\n' + newSurfacesString.trim() + '\n';
+                        }
+                    }
+
+                    inpContent += '\n** MATERIALS\n';
+                    inpContent += '*MATERIAL, NAME=Material-1\n';
+                    inpContent += '*ELASTIC\n';
+                    inpContent += '1.0, 0.3\n';
+
+                    if (setFileContent && setFileContent.toUpperCase().includes('ELSET=ALL_ELEM')) {
+                        inpContent += '\n** SECTIONS\n';
+                        inpContent += '*SOLID SECTION, ELSET=all_elem, MATERIAL=Material-1\n';
+                    }
+
+                    inpContent += '\n**\n** STEPS\n';
+                    inpContent += '*STEP, NAME=Step-1\n';
+                    inpContent += '*STATIC\n';
+                    inpContent += '** Define Boundary Conditions and Loads in this section\n';
+                    inpContent += '*END STEP\n';
+
+
+                    const inpBlob = new Blob([inpContent], { type: 'text/plain' });
+                    const inpFileName = `model.inp`;
+                    downloadLinkInp.href = URL.createObjectURL(inpBlob);
+                    downloadLinkInp.download = inpFileName;
+                    downloadLinkInp.textContent = `Download ${inpFileName}`;
+
+                    // --- Finalize UI ---
+                    loader.classList.add('hidden');
+                    outputContent.classList.remove('hidden');
+
+                } catch (error) {
+                    console.error("Conversion failed:", error);
+                    showError(error.message || "An unknown error occurred.");
+                    loader.classList.add('hidden');
+                    outputSection.classList.add('hidden');
+                }
+            }, 50);
+        });
+    </script>
+</body>
+</html>
+
