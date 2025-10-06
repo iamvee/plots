@@ -191,6 +191,11 @@
           <input id="refZ" type="number" step="any" placeholder="z">
           <button id="setRef" class="datBtn">Set point</button>
           <button id="togglePreview" class="datBtn" disabled>Check volume</button>
+<!-- Put this next to the Check volume button -->
+<label class="pill" style="display:flex;align-items:center;gap:6px">
+  <input id="signedVol" type="checkbox" checked>
+  Signed volume
+</label>
         </div>
         <div class="refPanel" style="margin-top:8px">
           <span class="pill">Amplitude for P–V</span>
@@ -780,15 +785,15 @@ togglePreview.addEventListener('click', ()=>{
   draw();
 });
 
-function volumeFrom(ref, tris, getPos){ // getPos(nodeId) -> [x,y,z]
-  let sum=0;
-  for(const t of tris){
-    const a=getPos(t[0]), b=getPos(t[1]), c=getPos(t[2]);
+function volumeFrom(ref, tris, getPos, signed=true){
+  let sum = 0;
+  for (const t of tris){
+    const a = getPos(t[0]), b = getPos(t[1]), c = getPos(t[2]);
     const ax=a[0]-ref.x, ay=a[1]-ref.y, az=a[2]-ref.z;
     const bx=b[0]-ref.x, by=b[1]-ref.y, bz=b[2]-ref.z;
     const cx=c[0]-ref.x, cy=c[1]-ref.y, cz=c[2]-ref.z;
-    const v = (ax*(by*cz - bz*cy) - ay*(bx*cz - bz*cx) + az*(bx*cy - by*cx)) / 6;
-    sum += Math.abs(v);
+    const v = (ax*(by*cz - bz*cy) - ay*(bx*cz - bz*cx) + az*(bx*cy - by*cx)) / 6; // signed triple product
+    sum += signed ? v : Math.abs(v);
   }
   return sum;
 }
@@ -808,23 +813,21 @@ runSeries.addEventListener('click', ()=>{
   if(!state.refPoint){ alert('Set a reference point first.'); return; }
   if(datState.order.length===0){ alert('Load and parse a DAT file first.'); return; }
 
+  const signed = document.getElementById('signedVol')?.checked ?? true;
   const {tris, mesh} = currentContext;
-  // base nodal positions
-  const base = new Map(); for(const v of mesh.verts){ base.set(v.id,[v.x,v.y,v.z]); }
 
-  // interpolate amp at total time (if any)
+  // base nodal positions
+  const base = new Map(); for (const v of mesh.verts){ base.set(v.id,[v.x,v.y,v.z]); }
+
+  // interpolate amplitude at total time (if any)
   let amp=null;
   const idx = ampSelect.value==='' ? -1 : parseInt(ampSelect.value,10);
   if(idx>=0) amp = lastAmplitudes[idx];
-
   const interp = amp ? (t=>{
     const p=amp.pairs; if(!p.length) return '';
-    // clamp
     if(t<=p[0][0]) return p[0][1];
     if(t>=p[p.length-1][0]) return p[p.length-1][1];
-    // find bracket
     let lo=0, hi=p.length-1;
-    // linear scan is fine for small tables; could binary search if big
     for(let k=1;k<p.length;k++){ if(t<p[k][0]){ hi=k; lo=k-1; break; } }
     const t0=p[lo][0], v0=p[lo][1], t1=p[hi][0], v1=p[hi][1];
     const a=(t-t0)/(t1-t0);
@@ -834,18 +837,17 @@ runSeries.addEventListener('click', ()=>{
   const rows=[]; const csv=['increment,dt,total_t,volume,amplitude'];
 
   // increment 0 / original
-  const v0 = volumeFrom(state.refPoint, tris, id=>base.get(id));
-  rows.push({inc:0, dt:0, tt:0, vol:v0, amp: (interp?interp(0):'')});
+  const v0 = volumeFrom(state.refPoint, tris, id=>base.get(id), signed);
+  rows.push({inc:0, dt:0, tt:0, vol:v0, amp:(interp?interp(0):'')});
   csv.push(`0,0,0,${v0},${interp?interp(0):''}`);
 
-  for(const inc of datState.order){
+  for (const inc of datState.order){
     const map = datState.uByInc.get(inc) || new Map();
     const getPos = id=>{
-      const b=base.get(id); const u=map.get(id);
-      if(u) return [b[0]+u[0], b[1]+u[1], b[2]+u[2]];
-      return b;
+      const b = base.get(id); const u = map.get(id);
+      return u ? [b[0]+u[0], b[1]+u[1], b[2]+u[2]] : b;
     };
-    const vol = volumeFrom(state.refPoint, tris, getPos);
+    const vol = volumeFrom(state.refPoint, tris, getPos, signed);
     const dt = datState.dtimeByInc.get(inc) ?? '';
     const tt = datState.totalTimeByInc.get(inc) ?? '';
     const av = interp ? interp(tt) : '';
@@ -853,7 +855,7 @@ runSeries.addEventListener('click', ()=>{
     csv.push(`${inc},${dt},${tt},${vol},${av}`);
   }
 
-  // table + csv
+  // table + csv (unchanged)
   volTableBody.innerHTML='';
   for(const r of rows){
     const tr=document.createElement('tr');
@@ -866,6 +868,7 @@ runSeries.addEventListener('click', ()=>{
   const blob=new Blob([csv.join('\n')], {type:'text/csv;charset=utf-8'});
   const url=URL.createObjectURL(blob); volCsv.href=url; volCsv.style.display='inline-block';
 });
+
 
 function enableVolumeButtonsIfReady(){
   const ok = !!currentContext; // surface selected
