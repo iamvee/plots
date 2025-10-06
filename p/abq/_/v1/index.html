@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>INP + DAT Parser/Viewer</title>
+<style>
+  :root {
+    --bg:#0b1220; --card:#121b2f; --ink:#e9f0ff; --muted:#9cb0d6; --accent:#7cc0ff; --accent2:#9ff0a8;
+    --panel:#ffffff; --panelInk:#0b1220;
+    --dat-bg:#0f1220; --dat-card:#171a2b; --dat-ink:#e6e8ef; --dat-muted:#aeb3c2; --dat-accent:#6cd1ff;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;
+    color:var(--ink); background:linear-gradient(180deg,#0a1020,#0e1630 40%,#0a1020);
+    display:flex; flex-direction:column;
+  }
+  header{padding:18px 20px 0; display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+  h1{font-size:20px; margin:0 8px 0 0; font-weight:700}
+  .sub{color:var(--muted); font-size:14px}
+
+  /* 3-column page */
+  .page{
+    display:grid; grid-template-columns: 1.2fr 1fr 1.1fr; gap:14px;
+    padding:14px 16px 18px; height:calc(100% - 64px); max-width:1700px; margin:0 auto;
+  }
+  .col{min-width:340px; overflow:auto}
+
+  /* Left (INP lists) + Middle (viewer) */
+  .drops{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px}
+  .drop{
+    border:2px dashed #2b3f6b; border-radius:16px; padding:18px; text-align:center;
+    background:rgba(18,27,47,.6); backdrop-filter: blur(3px);
+  }
+  .drop.drag{border-color:var(--accent); box-shadow:0 0 0 3px rgba(124,192,255,.2) inset}
+  .btn{cursor:pointer; background:var(--accent); color:#041428; padding:9px 12px; border:none; border-radius:12px; font-weight:700}
+  .btn.green{background:var(--accent2); color:#06210a}
+  .btn.softer{background:#5da8e7}
+  .btn:disabled{opacity:.5; cursor:not-allowed}
+
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:12px; margin-top:12px}
+  .card{background:var(--card); border:1px solid #223055; border-radius:16px; padding:12px 12px 14px}
+  .card h2{margin:2px 0 6px; font-size:16px}
+  .kv{font-size:13px; color:var(--muted); margin:2px 0}
+  .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
+  .surf{
+    display:flex; flex-direction:column; gap:8px; background:#0f1a33; border:1px solid #23325a;
+    border-radius:12px; padding:10px; margin-top:8px
+  }
+  .row{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap}
+  .muted{color:var(--muted)} .tiny{font-size:12px}
+  .btnbar{display:flex; gap:8px; flex-wrap:wrap}
+
+  .viewer{
+    background:var(--panel); color:var(--panelInk); border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:8px
+  }
+  .viewer h3{margin:0 0 4px 2px; font-size:16px}
+  .canvasWrap{flex:1 1 auto; border:1px solid #d7dbe7; border-radius:12px; position:relative; background:#fff; min-height:260px}
+  canvas{display:block; width:100%; height:100%; cursor:grab}
+  canvas.dragging{cursor:grabbing}
+  .hud{position:absolute; left:8px; top:8px; padding:4px 8px; background:rgba(255,255,255,.85); border:1px solid #cbd5e1; border-radius:8px; font-size:12px; color:#0b1220}
+  .controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap; border:1px solid #e3e7ef; background:#f9fbff; border-radius:10px; padding:6px 8px}
+  .controls label{font-size:12px; color:#334}
+  .ctrlVal{min-width:42px; text-align:right; font-variant-numeric:tabular-nums}
+  .sep{width:1px; background:#d9dfeb; height:20px}
+
+  /* Right column (DAT parser) */
+  .datCol{background:var(--dat-bg); color:var(--dat-ink); border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:10px; border:1px solid #232742}
+  .datCard{background:var(--dat-card); border:1px solid #232742; border-radius:14px; padding:14px}
+  .datTitle{margin:0 0 4px; font-size:16px}
+  .datSmall{color:var(--dat-muted); margin:0 0 6px; font-size:13px}
+  .datDrop{
+    display:flex; align-items:center; justify-content:center; gap:10px; min-height:120px;
+    border:2px dashed #2b3152; border-radius:14px; background:#121530; cursor:pointer; transition:.2s
+  }
+  .datDrop:hover{border-color:#3a426e}
+  .datDrop.drag{border-color:var(--dat-accent); background:#121a3a}
+  .datControls{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px}
+  .datBtn{background:#273058; border:1px solid #37407a; color:var(--dat-ink); padding:9px 12px; border-radius:12px; cursor:pointer}
+  .datBtn[disabled]{opacity:.5; cursor:not-allowed}
+  .datTags{display:flex; gap:10px; flex-wrap:wrap; margin:8px 0 4px}
+  .datTag{background:#1b2040; border:1px solid #2a2f5e; border-radius:999px; padding:4px 10px; color:#cfd3e6; font-size:12px}
+  .datLog{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#0c0f22; border:1px solid #1a1f3f; border-radius:12px; padding:10px; height:140px; overflow:auto; white-space:pre-wrap}
+  .datTableWrap{border:1px solid #1a1f3f; border-radius:12px; overflow:auto; max-height:240px; background:#0c0f22}
+  .datTable{width:max(640px,100%); border-collapse:collapse}
+  .datTable th,.datTable td{padding:8px; border-bottom:1px solid #262b4a; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; white-space:nowrap}
+  .datTable th{color:#c9d3ff; text-align:left}
+  .rightStatus{margin-left:auto; color:#92f0c5}
+  a.datLink{color:#9be0ff; text-decoration:none; border-bottom:1px dotted #9be0ff}
+</style>
+</head>
+<body>
+  <header>
+    <h1>INP Surface Parser</h1>
+  </header>
+
+  <div class="page">
+    <!-- Column 1: INP (assembly + single) -->
+    <div class="col">
+      <div class="drops">
+        <div id="dropAsm" class="drop">
+          <p style="margin:2px 0 6px"><b>Assembly INP</b> (with <span class="mono">*Part</span> blocks)</p>
+          <p><label class="btn" for="fileAsm">Choose file</label></p>
+          <input id="fileAsm" type="file" accept=".inp,.txt" style="display:none" />
+          <p class="tiny muted">Comments starting with <span class="mono">**</span> are removed.</p>
+        </div>
+        <div id="dropSingle" class="drop">
+          <p style="margin:2px 0 6px"><b>Single-Part INP</b> (no <span class="mono">*Part</span> / <span class="mono">*End Part</span>)</p>
+          <p><label class="btn" for="fileSingle">Choose file</label></p>
+          <input id="fileSingle" type="file" accept=".inp,.txt" style="display:none" />
+          <p class="tiny muted">Parses global <span class="mono">*NODE</span>, <span class="mono">*ELEMENT</span>, <span class="mono">*Elset</span>, <span class="mono">*Surface</span>.</p>
+        </div>
+      </div>
+      <section id="out"></section>
+    </div>
+
+    <!-- Column 2: viewer -->
+    <div class="col viewer">
+      <h3 id="vizTitle">Surface viewer</h3>
+      <div class="tiny" id="vizMeta" style="margin:0 2px 4px;color:#465060"></div>
+      <div class="controls" id="deformControls" style="display:none">
+        <label>Increment:
+          <input id="incSlider" type="range" min="1" max="1" step="1" value="1" style="vertical-align:middle">
+          <span class="ctrlVal" id="incLabel">1</span>
+        </label>
+        <div class="sep"></div>
+        <label>Scale:
+          <input id="scaleSlider" type="range" min="0" max="5" step="0.05" value="1">
+          <span class="ctrlVal" id="scaleLabel">1.00×</span>
+        </label>
+        <div class="sep"></div>
+        <span id="timeLabel" class="tiny" style="color:#334"></span>
+      </div>
+      <div class="canvasWrap" id="canvasWrap">
+        <canvas id="viz"></canvas>
+        <div class="hud">Drag: rotate • Wheel: zoom • Shift+Drag: pan • Dbl-click: reset</div>
+      </div>
+    </div>
+
+    <!-- Column 3: DAT parser -->
+    <div class="col datCol">
+      <div class="datCard">
+        <h3 class="datTitle">Abaqus DAT → CSV (Increment Node Output)</h3>
+        <p class="datSmall">Drop a <code>.dat</code> file or click to choose. Exports CSV: <code>increment,time_increment,node,U1,U2,U3</code>. Also powers the <b>Deform</b> button.</p>
+        <div id="datDrop" class="datDrop" tabindex="0" role="button" aria-label="Drop DAT file here or click to choose">
+          <span>📄 Drop <em>.dat</em> file here or click to choose</span>
+          <input id="datFile" type="file" accept=".dat,text/plain" hidden />
+        </div>
+        <div class="datControls">
+          <button id="datParse" class="datBtn" disabled>Parse DAT → CSV</button>
+          <a id="datDownload" class="datBtn datLink" style="display:none" download="node_displacements_by_increment.csv">⬇ Download CSV</a>
+          <button id="datClear" class="datBtn">Clear</button>
+          <span id="datStatus" class="rightStatus"></span>
+        </div>
+        <div class="datTags">
+          <span id="datFname" class="datTag" style="display:none"></span>
+          <span id="datFsize" class="datTag" style="display:none"></span>
+          <span id="datStats" class="datTag" style="display:none"></span>
+        </div>
+        <div class="datLog" id="datLog" aria-live="polite"></div>
+        <div class="datTableWrap" id="datTableWrap" style="display:none">
+          <table id="datPreview" class="datTable">
+            <thead><tr><th>increment</th><th>time_increment</th><th>node</th><th>U1</th><th>U2</th><th>U3</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ======================= INP parser + viewer ======================= */
+function cleanLines(text){ return text.replace(/\r/g,'').split('\n').filter(line=>!/^\s*\*\*/.test(line)); }
+function parseCsvTokens(chunk){ return chunk.replace(/[^0-9,.\s\-+eE]/g,' ').split(/[, \t\n]+/).filter(t=>t.length>0); }
+function toInts(tokens){ return tokens.map(x=>parseInt(x,10)).filter(Number.isFinite); }
+function download(filename, text, mime='text/csv'){ const b=new Blob([text],{type:mime}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u); }
+const FACE_MAP={ 'S1':n=>[n[0],n[1],n[2]], 'S2':n=>[n[0],n[3],n[1]], 'S3':n=>[n[1],n[3],n[2]], 'S4':n=>[n[2],n[3],n[0]] };
+
+function parseWithin(lines, iStart, iEnd){
+  const data={nodes:new Map(), elements:new Map(), elsets:new Map(), surfaces:[]}; let i=iStart;
+  while(i<iEnd){
+    const cur=lines[i].trim();
+
+    if(/^\*node\b/i.test(cur)){ i++;
+      while(i<iEnd){ const s=lines[i].trim(); if(s.startsWith('*')||!s.length) break;
+        const t=parseCsvTokens(s); if(t.length>=4){ const id=parseInt(t[0],10);
+          const x=parseFloat(t[1]),y=parseFloat(t[2]),z=parseFloat(t[3]); if(Number.isFinite(id)) data.nodes.set(id,[x,y,z]); }
+        i++; } continue; }
+
+    if(/^\*element\b/i.test(cur)){ i++;
+      while(i<iEnd){ const s=lines[i].trim(); if(s.startsWith('*')||!s.length) break;
+        const nums=toInts(parseCsvTokens(s)); if(nums.length>=5){ const eid=nums[0]; const nodes=nums.slice(1,5); data.elements.set(eid,nodes); }
+        i++; } continue; }
+
+    if(/^\*elset\b/i.test(cur)){ const nm=/elset\s*=\s*([^,\s]+)/i.exec(cur); const setName=nm?nm[1]:`ELSET_${data.elsets.size+1}`; const ids=[]; i++;
+      while(i<iEnd){ const s=lines[i].trim(); if(s.startsWith('*')||!s.length) break; ids.push(...toInts(parseCsvTokens(s))); i++; }
+      data.elsets.set(setName,new Set(ids)); continue; }
+
+    if(/^\*surface\b/i.test(cur) && /type\s*=\s*element/i.test(cur)){ const sm=/name\s*=\s*([^,\s]+)/i.exec(cur);
+      const surfName=sm?sm[1]:`Surf_${data.surfaces.length+1}`; const items=[]; i++;
+      while(i<iEnd){ const s=lines[i].trim(); if(s.startsWith('*')||!s.length) break;
+        const m=s.split(/[, \t]+/).filter(Boolean); if(m.length>=2){ const elsetRef=m[0]; const face=m[1].toUpperCase(); if(/^S[1-4]$/.test(face)) items.push({elset:elsetRef,face}); } i++; }
+      data.surfaces.push({name:surfName,items}); continue; }
+
+    i++;
+  }
+  return data;
+}
+function parseAssembly(lines){ const parts=[]; for(let i=0;i<lines.length;i++){ const l=lines[i].trim();
+  if(/^\*part\b/i.test(l)){ const name=/name\s*=\s*([^,\s]+)/i.exec(l)?.[1]||`Part_${parts.length+1}`; let j=i+1; while(j<lines.length && !/^\*end\s+part\b/i.test(lines[j].trim())) j++;
+    const block=parseWithin(lines,i+1,j); parts.push({name,...block}); if(j<lines.length) i=j; } } return parts; }
+function parseSingle(lines){ const block=parseWithin(lines,0,lines.length); return [{name:'global',...block}]; }
+
+function buildCombined(part, surface){
+  const seenEF=new Set(); const faceRows=[]; const nodesUsed=new Set();
+  for(const item of surface.items){ const set=part.elsets.get(item.elset); const pick=FACE_MAP[item.face];
+    if(!set||!pick) continue;
+    for(const eid of set){
+      const key=eid+'|'+item.face; if(seenEF.has(key)) continue;
+      const nodes=part.elements.get(eid); if(!nodes||nodes.length<4) continue;
+      const [a,b,c]=pick(nodes);
+      faceRows.push([part.name, surface.name, eid, a,b,c]);
+      nodesUsed.add(a); nodesUsed.add(b); nodesUsed.add(c);
+      seenEF.add(key);
+    }
+  }
+  faceRows.sort((A,B)=>A[2]-B[2]||A[3]-B[3]||A[4]-B[4]||A[5]-B[5]);
+  const nodeRows=Array.from(nodesUsed).sort((a,b)=>a-b).map(n=>{
+    const xyz=part.nodes.get(n)||[NaN,NaN,NaN];
+    return [part.name, surface.name, n, ...xyz];
+  });
+
+  const facesCsv='part,surface,element,node1,node2,node3\n'+faceRows.map(r=>r.join(',')).join('\n');
+  const nodesCsv='part,surface,node,x,y,z\n'+nodeRows.map(r=>r.join(',')).join('\n');
+  return {facesCsv, nodesCsv, facesCount: faceRows.length, nodeCount: nodeRows.length, tris: faceRows.map(r=>r.slice(3,6)), nodeSet: new Set(nodeRows.map(r=>r[2])) };
+}
+
+const out = document.getElementById('out');
+setupDrop('Asm', f=>handleFile(f,true)); setupDrop('Single', f=>handleFile(f,false));
+function setupDrop(suffix,onFile){ const dz=document.getElementById('drop'+suffix), inp=document.getElementById('file'+suffix);
+  ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault(); e.stopPropagation(); dz.classList.add('drag');}));
+  ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault(); e.stopPropagation(); dz.classList.remove('drag');}));
+  dz.addEventListener('drop', e=>{const f=e.dataTransfer.files[0]; if(f) onFile(f);});
+  inp.addEventListener('change', e=>{const f=e.target.files[0]; if(f) onFile(f);});
+}
+function handleFile(file,isAssembly){
+  const r=new FileReader();
+  r.onload=()=>{
+    const lines=cleanLines(String(r.result));
+    let parts=isAssembly?parseAssembly(lines):parseSingle(lines);
+    if(parts.length===0 && isAssembly){ parts=parseSingle(lines); }
+    render(parts, file.name);
+  };
+  r.readAsText(file);
+}
+function render(parts, filename){
+  out.innerHTML='';
+  if(parts.length===0){ out.innerHTML=`<p class="muted">No parsable content found in <b>${filename}</b>.</p>`; return; }
+  const grid=document.createElement('div'); grid.className='grid';
+  for(const part of parts){
+    const card=document.createElement('div'); card.className='card';
+    card.innerHTML=`<h2>Part: <span class="mono">${part.name}</span></h2>
+    <div class="kv">Nodes: <b>${part.nodes.size}</b> • Elements: <b>${part.elements.size}</b> • Elsets: <b>${part.elsets.size}</b> • Surfaces: <b>${part.surfaces.length}</b></div>
+    <div class="kv tiny">Surfaces are combined across S1–S4 (tet corner nodes only).</div>`;
+    if(part.surfaces.length===0){
+      card.insertAdjacentHTML('beforeend', `<div class="surf"><div class="muted">No element-type surfaces in this part.</div></div>`);
+    }
+    for(const surface of part.surfaces){
+      const built=buildCombined(part, surface);
+      const {facesCsv,nodesCsv,facesCount,nodeCount,tris,nodeSet}=built;
+      const block=document.createElement('div'); block.className='surf';
+      block.innerHTML = `
+        <div class="row">
+          <div>
+            <strong class="mono">${surface.name}</strong>
+            <div class="tiny muted">Combined faces: <b>${facesCount}</b> • Unique nodes: <b>${nodeCount}</b></div>
+          </div>
+          <div class="btnbar">
+            <button class="btn" ${facesCount===0?'disabled':''}>Download faces</button>
+            <button class="btn" ${nodeCount===0?'disabled':''}>Download nodes</button>
+            <button class="btn green" ${facesCount===0?'disabled':''}>Visualize</button>
+            <button class="btn softer deformBtn" title="Overlay deformed mesh from DAT" disabled>Deform</button>
+          </div>
+        </div>`;
+      const [btnFaces, btnNodes, btnViz, btnDef] = block.querySelectorAll('button');
+      btnFaces.addEventListener('click', ()=>download(`${safe(part.name)}__${safe(surface.name)}__faces.csv`, facesCsv));
+      btnNodes.addEventListener('click', ()=>download(`${safe(part.name)}__${safe(surface.name)}__nodes.csv`, nodesCsv));
+      btnViz.addEventListener('click', ()=>{ const mesh=buildMeshForViz(part, tris); showInViewer(mesh, part.name, surface.name); hideDeformControls(); });
+      btnDef.addEventListener('click', ()=> startDeform(part, surface, tris, nodeSet));
+      card.appendChild(block);
+    }
+    grid.appendChild(card);
+  }
+  out.appendChild(grid);
+  refreshDeformButtons();
+}
+function safe(s){ return String(s).replace(/[^\w.-]+/g,'_'); }
+
+/* ---------- Stable viewer sizing & interaction ---------- */
+const canvas = document.getElementById('viz');
+const wrap   = document.getElementById('canvasWrap');
+const vizTitle = document.getElementById('vizTitle');
+const vizMeta  = document.getElementById('vizMeta');
+const deformControls = document.getElementById('deformControls');
+const incSlider = document.getElementById('incSlider');
+const incLabel  = document.getElementById('incLabel');
+const scaleSlider = document.getElementById('scaleSlider');
+const scaleLabel  = document.getElementById('scaleLabel');
+const timeLabel   = document.getElementById('timeLabel');
+
+let ctx = canvas.getContext('2d');
+let CW=0,CH=0, resizeRAF=null;
+
+const ro=new ResizeObserver(()=>{ if(resizeRAF) cancelAnimationFrame(resizeRAF);
+  resizeRAF=requestAnimationFrame(()=>{
+    const rect=wrap.getBoundingClientRect();
+    const dpr=Math.min(2, window.devicePixelRatio||1);
+    const w=Math.max(200, Math.floor(rect.width*dpr));
+    const h=Math.max(200, Math.floor(rect.height*dpr));
+    if(w!==CW || h!==CH){ CW=w; CH=h; canvas.width=CW; canvas.height=CH; draw(); }
+  });
+});
+ro.observe(wrap);
+
+function buildMeshForViz(part, faceTriples){
+  const ids=new Set(); faceTriples.forEach(t=>t.forEach(n=>ids.add(n)));
+  const id2i=new Map(); const verts=[];
+  Array.from(ids).forEach((nid,idx)=>{ id2i.set(nid,idx); const xyz=part.nodes.get(nid)||[0,0,0]; verts.push({id:nid,x:xyz[0],y:xyz[1],z:xyz[2]}); });
+  const faces=faceTriples.map(t=>t.map(n=>id2i.get(n)));
+  return {verts, faces, id2i};
+}
+
+const state={rx:0.6, ry:-0.8, tx:0, ty:0, zoom:1.0, cx:0, cy:0, cz:0, scale:1, verts:[], faces:[],
+             baseVerts:[], overlayVerts:null, overlayFaces:null};
+let drag=null;
+
+canvas.addEventListener('mousedown', e=>{
+  const r=canvas.getBoundingClientRect();
+  drag={x:e.clientX-r.left, y:e.clientY-r.top, rx:state.rx, ry:state.ry, tx:state.tx, ty:state.ty, shift:e.shiftKey};
+  canvas.classList.add('dragging');
+});
+window.addEventListener('mouseup', ()=>{ drag=null; canvas.classList.remove('dragging'); });
+window.addEventListener('mousemove', e=>{
+  if(!drag) return;
+  const r=canvas.getBoundingClientRect(); const nx=e.clientX-r.left, ny=e.clientY-r.top; const dx=nx-drag.x, dy=ny-drag.y;
+  if(e.shiftKey || drag.shift){ state.tx = drag.tx + dx/(120*state.zoom); state.ty = drag.ty + dy/(120*state.zoom); }
+  else { state.ry = drag.ry + dx*0.01; state.rx = drag.rx + dy*0.01; }
+  draw();
+});
+canvas.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const k=Math.exp(-e.deltaY*0.001);
+  state.zoom=Math.max(0.05, Math.min(20, state.zoom*k));
+  draw();
+},{passive:false});
+canvas.addEventListener('dblclick', ()=>{ state.rx=0.6; state.ry=-0.8; state.tx=0; state.ty=0; state.zoom=1.0; draw(); });
+
+function centerAndScale(verts){
+  if(!verts.length) return;
+  let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;
+  for(const v of verts){ if(!isFinite(v.x+v.y+v.z)) continue;
+    if(v.x<minX)minX=v.x; if(v.y<minY)minY=v.y; if(v.z<minZ)minZ=v.z;
+    if(v.x>maxX)maxX=v.x; if(v.y>maxY)maxY=v.y; if(v.z>maxZ)maxZ=v.z;
+  }
+  const cx=(minX+maxX)/2, cy=(minY+maxY)/2, cz=(minZ+maxZ)/2;
+  const size=Math.max(maxX-minX, maxY-minY, maxZ-minZ) || 1;
+  state.cx=cx; state.cy=cy; state.cz=cz;
+  state.scale = 0.9 * Math.min(CW,CH) / size;
+}
+
+function showInViewer(mesh, partName, surfName){
+  state.verts=mesh.verts; state.faces=mesh.faces;
+  state.baseVerts = mesh.verts.map(v=>({x:v.x,y:v.y,z:v.z,id:v.id}));
+  state.overlayVerts=null; state.overlayFaces=null;
+  centerAndScale(state.verts);
+  vizTitle.textContent = `Surface viewer — ${surfName}`;
+  vizMeta.textContent  = `Part: ${partName} • Verts: ${state.verts.length} • Tris: ${state.faces.length}`;
+  draw();
+}
+
+function hideDeformControls(){ deformControls.style.display='none'; }
+
+function draw(){
+  if(!ctx) return;
+  ctx.clearRect(0,0,CW,CH);
+  ctx.save();
+  ctx.translate(CW/2, CH/2);
+  ctx.scale(1, -1);
+
+  const sinx=Math.sin(state.rx), cosx=Math.cos(state.rx);
+  const siny=Math.sin(state.ry), cosy=Math.cos(state.ry);
+  const proj = state.verts.map(v=>{
+    let x=(v.x-state.cx), y=(v.y-state.cy), z=(v.z-state.cz);
+    let y1 = y*cosx - z*sinx, z1 = y*sinx + z*cosx;
+    let x2 = x*cosy + z1*siny, z2 = -x*siny + z1*cosy;
+    const s = state.scale*state.zoom;
+    return {x: x2*s + state.tx*CW/2, y: y1*s + state.ty*CH/2, z: z2};
+  });
+
+  const order = state.faces.map((f,idx)=>({idx, z:(proj[f[0]].z+proj[f[1]].z+proj[f[2]].z)/3})).sort((a,b)=>a.z-b.z);
+  // original wireframe
+  for(const o of order){
+    const f=state.faces[o.idx]; const a=proj[f[0]], b=proj[f[1]], c=proj[f[2]];
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.lineTo(c.x,c.y); ctx.closePath();
+    ctx.strokeStyle='rgba(90,100,120,0.9)'; ctx.lineWidth=0.75; ctx.stroke();
+  }
+
+  // overlay deformed fill if exists
+  if(state.overlayVerts){
+    const proj2 = state.overlayVerts.map(v=>{
+      let x=(v.x-state.cx), y=(v.y-state.cy), z=(v.z-state.cz);
+      let y1 = y*cosx - z*sinx, z1 = y*sinx + z*cosx;
+      let x2 = x*cosy + z1*siny, z2 = -x*siny + z1*cosy;
+      const s = state.scale*state.zoom;
+      return {x: x2*s + state.tx*CW/2, y: y1*s + state.ty*CH/2, z: z2};
+    });
+    const ord2 = state.overlayFaces.map((f,idx)=>({idx, z:(proj2[f[0]].z+proj2[f[1]].z+proj2[f[2]].z)/3})).sort((a,b)=>a.z-b.z);
+    for(const o of ord2){
+      const f=state.overlayFaces[o.idx]; const a=proj2[f[0]], b=proj2[f[1]], c=proj2[f[2]];
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.lineTo(c.x,c.y); ctx.closePath();
+      ctx.fillStyle='rgba(60,100,200,0.28)'; ctx.strokeStyle='rgba(40,80,160,0.95)'; ctx.lineWidth=1.1; ctx.fill(); ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+
+/* ======================= DAT parser (native) ======================= */
+const datDrop   = document.getElementById('datDrop');
+const datFile   = document.getElementById('datFile');
+const datParse  = document.getElementById('datParse');
+const datDL     = document.getElementById('datDownload');
+const datClear  = document.getElementById('datClear');
+const datLog    = document.getElementById('datLog');
+const datStatus = document.getElementById('datStatus');
+const datFname  = document.getElementById('datFname');
+const datFsize  = document.getElementById('datFsize');
+const datStats  = document.getElementById('datStats');
+const datTableWrap = document.getElementById('datTableWrap');
+const datPrev   = document.getElementById('datPreview');
+const datPrevT  = datPrev.querySelector('tbody');
+let datCurrentFile=null, datCsvUrl=null;
+
+/* in-memory displacement field */
+const datState = { order: [], timeByInc:new Map(), uByInc:new Map() }; // inc list; inc->time; inc->Map(node->[u1,u2,u3])
+
+function datHumanSize(bytes){ if(bytes<1024) return bytes+' B'; const u=['KB','MB','GB']; let i=-1; do{bytes/=1024;i++;}while(bytes>=1024&&i<u.length-1); return bytes.toFixed(2)+' '+u[i]; }
+function datLogLine(s){ datLog.textContent += s + '\n'; datLog.scrollTop = datLog.scrollHeight; }
+function datSetStatus(s){ datStatus.textContent = s || ''; }
+
+function datAccept(f){
+  datCurrentFile=f; datParse.disabled=false;
+  datFname.style.display=datFsize.style.display='inline-block';
+  datFname.textContent = `File: ${f.name}`;
+  datFsize.textContent = `Size: ${datHumanSize(f.size)}`;
+  datStats.style.display='none';
+  datLog.textContent=''; datTableWrap.style.display='none'; datPrevT.innerHTML='';
+  if(datCsvUrl){ URL.revokeObjectURL(datCsvUrl); datCsvUrl=null; }
+  datDL.style.display='none';
+  datSetStatus('Ready to parse');
+}
+
+datDrop.addEventListener('click', ()=>datFile.click());
+datDrop.addEventListener('dragover', e=>{ e.preventDefault(); datDrop.classList.add('drag'); });
+datDrop.addEventListener('dragleave', ()=> datDrop.classList.remove('drag'));
+datDrop.addEventListener('drop', e=>{
+  e.preventDefault(); datDrop.classList.remove('drag');
+  const f=e.dataTransfer.files?.[0]; if(f) datAccept(f);
+});
+datFile.addEventListener('change', e=>{
+  const f=e.target.files?.[0]; if(f) datAccept(f);
+});
+
+function datNormalize(str){ return {spaced: str.replace(/\s+/g,' ').trim(), nospace: str.replace(/\s+/g,'').trim()}; }
+
+function parseDatToCsv(text){
+  const lines = text.split(/\r?\n/); const n=lines.length;
+  const incHeader=/^\s*INCREMENT\s+(\d+)\s+SUMMARY/i;
+  const timeLine=/^\s*TIME INCREMENT COMPLETED\s+([-\d.E+]+)/i;
+  const nodeOutputMarker='NODEOUTPUT';
+  const headerRow=/NODE\s+.*U1\s+U2\s+U3/i;
+  const numRow=/^\s*(\d+)\s+([-\d.E+]+)\s+([-\d.E+]+)\s+([-\d.E+]+)/;
+  const isStop=s=>/^\s*(MAXIMUM|MINIMUM|INCREMENT\s+\d+\s+SUMMARY|N\s*O\s*D\s*E\s+O\s*U\s*T\s*P\s*U\s*T)/i.test(s);
+
+  let i=0, totalRows=0, incCount=0;
+  const out=['increment,time_increment,node,U1,U2,U3'];
+  datState.order.length=0; datState.timeByInc.clear(); datState.uByInc.clear();
+
+  while(i<n){
+    const mInc = lines[i]?.match(incHeader);
+    if(!mInc){ i++; continue; }
+    const incIndex = parseInt(mInc[1],10); incCount++; i++;
+
+    // find time incremental value near this increment
+    let timeInc = null, j=i;
+    for(; j<n; j++){
+      const t=lines[j]; const mt=t.match(timeLine);
+      if(mt){ timeInc=parseFloat(mt[1]); break; }
+      if(incHeader.test(t)) break;
+    }
+    i=j;
+
+    // find NODE OUTPUT marker
+    for(; i<n; i++){
+      const {nospace}=datNormalize(lines[i]);
+      if(nospace===nodeOutputMarker) break;
+      if(incHeader.test(lines[i])) break;
+    }
+    if(i>=n || datNormalize(lines[i]).nospace!==nodeOutputMarker) continue;
+
+    // skip to header row, then parse data rows
+    for(i++; i<n && !headerRow.test(lines[i]); i++){}
+    if(i>=n) break;
+
+    const map = new Map(); // node -> [u1,u2,u3]
+    for(i++; i<n; i++){
+      const s=lines[i];
+      if(isStop(s)) break;
+      const m=s.match(numRow);
+      if(!m) continue;
+      const node=parseInt(m[1],10), U1=parseFloat(m[2]), U2=parseFloat(m[3]), U3=parseFloat(m[4]);
+      out.push(`${incIndex},${timeInc ?? ''},${node},${U1},${U2},${U3}`);
+      totalRows++;
+      if(Number.isFinite(node)) map.set(node, [U1,U2,U3]);
+    }
+    datState.order.push(incIndex);
+    datState.timeByInc.set(incIndex, timeInc ?? null);
+    datState.uByInc.set(incIndex, map);
+  }
+  return {csvText: out.join('\n'), totalRows, increments: incCount};
+}
+
+datParse.addEventListener('click', async ()=>{
+  if(!datCurrentFile) return;
+  datSetStatus('Reading…');
+  const text = await datCurrentFile.text();
+  datLogLine(`Loaded ${datCurrentFile.name} (${datHumanSize(datCurrentFile.size)}), ${text.length.toLocaleString()} chars`);
+  datSetStatus('Parsing…');
+
+  const t0=performance.now();
+  const {csvText, totalRows, increments} = parseDatToCsv(text);
+  const t1=performance.now();
+
+  const blob=new Blob([csvText], {type:'text/csv;charset=utf-8'});
+  datCsvUrl = URL.createObjectURL(blob);
+  datDL.href = datCsvUrl;
+  datDL.style.display='inline-block';
+  datDL.download = (datCurrentFile.name.replace(/\.dat$/i,'') || 'output') + '_node_displacements_by_increment.csv';
+
+  datStats.style.display='inline-block';
+  datStats.textContent = `Rows: ${totalRows.toLocaleString()} · Increments: ${increments}`;
+  datLogLine(`Parsed ${totalRows.toLocaleString()} rows across ${increments} increments in ${(t1-t0).toFixed(1)} ms`);
+  datSetStatus('Done ✓');
+
+  // preview first ~200 lines in scrollable table (fits better)
+  datPrevT.innerHTML='';
+  const rows = csvText.split('\n').slice(1, 201);
+  for(const row of rows){
+    if(!row.trim()) continue;
+    const [inc,time,node,U1,U2,U3]=row.split(',');
+    const tr=document.createElement('tr');
+    for(const v of [inc,time,node,U1,U2,U3]){
+      const td=document.createElement('td'); td.textContent=v; tr.appendChild(td);
+    }
+    datPrevT.appendChild(tr);
+  }
+  datTableWrap.style.display = rows.length ? 'block' : 'none';
+
+  refreshDeformButtons();
+});
+
+datClear.addEventListener('click', ()=>{
+  datCurrentFile=null; datFile.value=''; datParse.disabled=true;
+  if(datCsvUrl){ URL.revokeObjectURL(datCsvUrl); datCsvUrl=null; }
+  datDL.style.display='none'; datTableWrap.style.display='none'; datPrevT.innerHTML='';
+  datFname.style.display=datFsize.style.display=datStats.style.display='none';
+  datLog.textContent=''; datSetStatus('');
+  datState.order.length=0; datState.timeByInc.clear(); datState.uByInc.clear();
+  refreshDeformButtons(); // disable again
+});
+
+/* enable/disable "Deform" buttons based on DAT availability */
+function refreshDeformButtons(){
+  const enabled = datState.order.length>0;
+  document.querySelectorAll('.deformBtn').forEach(b=> b.disabled = !enabled);
+}
+
+/* ======== Deformed surface overlay ======== */
+let deformContext = null; // {part, surface, tris, nodeSet, mesh, id2index}
+
+function startDeform(part, surface, tris, nodeSet){
+  if(datState.order.length===0){ alert('Load and parse a DAT file first.'); return; }
+  const mesh = buildMeshForViz(part, tris);
+  deformContext = {part, surface, tris, nodeSet, mesh, id2index: mesh.id2i};
+
+  showInViewer(mesh, part.name, surface.name);
+
+  deformControls.style.display='flex';
+  incSlider.min = 1;
+  incSlider.max = Math.max(...datState.order);
+  incSlider.value = datState.order[0];
+  incLabel.textContent = incSlider.value;
+  scaleSlider.value = 1;
+  scaleLabel.textContent = '1.00×';
+  updateOverlayFromControls();
+}
+
+incSlider.addEventListener('input', ()=>{
+  incLabel.textContent = incSlider.value;
+  updateOverlayFromControls();
+});
+scaleSlider.addEventListener('input', ()=>{
+  scaleLabel.textContent = Number(scaleSlider.value).toFixed(2) + '×';
+  updateOverlayFromControls();
+});
+
+function updateOverlayFromControls(){
+  if(!deformContext) return;
+  const inc = parseInt(incSlider.value,10);
+  const scale = parseFloat(scaleSlider.value);
+  timeLabel.textContent = 'Time increment: ' + (datState.timeByInc.get(inc) ?? '—');
+
+  const uMap = datState.uByInc.get(inc);
+  if(!uMap){ state.overlayVerts=null; state.overlayFaces=null; draw(); return; }
+
+  // Clone base vertices and apply displacement if available
+  const verts = deformContext.mesh.verts.map(v=>{
+    const u = uMap.get(v.id); // [u1,u2,u3] or undefined
+    if(u){ return {x: v.x + u[0]*scale, y: v.y + u[1]*scale, z: v.z + u[2]*scale, id:v.id}; }
+    return {x:v.x, y:v.y, z:v.z, id:v.id};
+  });
+
+  state.overlayVerts = verts;
+  state.overlayFaces = deformContext.mesh.faces;
+  draw();
+}
+</script>
+</body>
+</html>
