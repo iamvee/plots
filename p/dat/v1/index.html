@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Abaqus DAT → CSV (Increment Node Output)</title>
+<style>
+  :root { --bg:#0f1220; --card:#171a2b; --ink:#e6e8ef; --muted:#aeb3c2; --accent:#6cd1ff; --ok:#66e0a3; --warn:#ffca5c; --err:#ff6b6b; }
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui, Segoe UI, Roboto, sans-serif}
+  .wrap{max-width:980px;margin:40px auto;padding:0 16px}
+  .card{background:var(--card);border:1px solid #232742;border-radius:16px;padding:18px 18px 8px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+  h1{margin:0 0 8px;font-size:22px}
+  p{margin:6px 0 12px;color:var(--muted)}
+  .drop{display:flex;align-items:center;justify-content:center;gap:10px;min-height:140px;border:2px dashed #2b3152;border-radius:14px;background:#121530;cursor:pointer;transition:.2s}
+  .drop:hover{border-color:#3a426e}
+  .drop.drag{border-color:var(--accent);background:#121a3a}
+  .controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .btn{background:#273058;border:1px solid #37407a;color:var(--ink);padding:10px 14px;border-radius:12px;cursor:pointer}
+  .btn[disabled]{opacity:.5;cursor:not-allowed}
+  .meta{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 4px}
+  .tag{background:#1b2040;border:1px solid #2a2f5e;border-radius:999px;padding:4px 10px;color:#cfd3e6}
+  .log{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;background:#0c0f22;border:1px solid #1a1f3f;border-radius:12px;padding:10px;height:160px;overflow:auto;white-space:pre-wrap}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  th,td{padding:8px;border-bottom:1px solid #262b4a;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+  th{color:#c9d3ff;text-align:left}
+  .right{float:right;color:#92f0c5}
+  a.download{color:#9be0ff;text-decoration:none;border-bottom:1px dotted #9be0ff}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Abaqus DAT → CSV (Increment Node Output)</h1>
+    <p>Drop a <code>.dat</code> file below (or click to choose). I’ll extract each increment’s <strong>NODE OUTPUT</strong> table and give you a CSV: <code>increment,time_increment,node,U1,U2,U3</code>.</p>
+
+    <div id="drop" class="drop" tabindex="0" role="button" aria-label="Drop DAT file here or click to choose">
+      <span>📄 Drop <em>.dat</em> file here or click to choose</span>
+      <input id="file" type="file" accept=".dat,text/plain" hidden />
+    </div>
+
+    <div class="controls">
+      <button id="parse" class="btn" disabled>Parse DAT → CSV</button>
+      <a id="download" class="btn" style="display:none" download="node_displacements_by_increment.csv">⬇ Download CSV</a>
+      <button id="clear" class="btn">Clear</button>
+      <span id="status" class="right"></span>
+    </div>
+
+    <div class="meta">
+      <span id="fname" class="tag" style="display:none"></span>
+      <span id="fsize" class="tag" style="display:none"></span>
+      <span id="stats" class="tag" style="display:none"></span>
+    </div>
+
+    <div class="log" id="log" aria-live="polite"></div>
+
+    <table id="preview" style="display:none">
+      <thead><tr><th>increment</th><th>time_increment</th><th>node</th><th>U1</th><th>U2</th><th>U3</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const drop = $('drop'), fileInput = $('file'), parseBtn = $('parse');
+  const downloadLink = $('download'), clearBtn = $('clear');
+  const logEl = $('log'), statusEl = $('status'), fnameEl = $('fname'), fsizeEl = $('fsize'), statsEl = $('stats');
+  const preview = $('preview'), previewBody = preview.querySelector('tbody');
+
+  let currentFile = null, csvBlobUrl = null;
+
+  function log(msg) {
+    logEl.textContent += msg + '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function setStatus(msg) { statusEl.textContent = msg || ''; }
+
+  function humanSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    const units = ['KB','MB','GB']; let i= -1; do { bytes /= 1024; i++; } while (bytes >= 1024 && i < units.length-1);
+    return bytes.toFixed(2) + ' ' + units[i];
+  }
+
+  function armDrop() {
+    drop.addEventListener('click', () => fileInput.click());
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault(); drop.classList.remove('drag');
+      const f = e.dataTransfer.files?.[0];
+      if (f) acceptFile(f);
+    });
+    fileInput.addEventListener('change', (e) => {
+      const f = e.target.files?.[0];
+      if (f) acceptFile(f);
+    });
+  }
+
+  function acceptFile(f) {
+    currentFile = f;
+    parseBtn.disabled = false;
+    fnameEl.style.display = fsizeEl.style.display = 'inline-block';
+    fnameEl.textContent = `File: ${f.name}`;
+    fsizeEl.textContent = `Size: ${humanSize(f.size)}`;
+    statsEl.style.display = 'none';
+    logEl.textContent = '';
+    preview.style.display = 'none';
+    previewBody.innerHTML = '';
+    if (csvBlobUrl) { URL.revokeObjectURL(csvBlobUrl); csvBlobUrl = null; }
+    downloadLink.style.display = 'none';
+    setStatus('Ready to parse');
+  }
+
+  function normalize(str) {
+    // collapse spaces to single, and also make a no-space version
+    return { spaced: str.replace(/\s+/g,' ').trim(), nospace: str.replace(/\s+/g,'').trim() };
+  }
+
+  function parseDatToCsv(text) {
+    const lines = text.split(/\r?\n/);
+    const n = lines.length;
+
+    // Patterns
+    const incHeader = /^\s*INCREMENT\s+(\d+)\s+SUMMARY/i;
+    const timeLine = /^\s*TIME INCREMENT COMPLETED\s+([-\d.E+]+)/i;
+    // "N O D E   O U T P U T" can appear with spaced letters; use nospace normalization
+    const nodeOutputMarker = 'NODEOUTPUT';
+    const headerRow = /NODE\s+FOOT-.*U1\s+U2\s+U3/i;
+    const numRow = /^\s*(\d+)\s+([-\d.E+]+)\s+([-\d.E+]+)\s+([-\d.E+]+)/;
+    const isStop = (s) => /^\s*(MAXIMUM|MINIMUM|INCREMENT\s+\d+\s+SUMMARY|N\s*O\s*D\s*E\s+O\s*U\s*T\s*P\s*U\s*T)/i.test(s);
+
+    let i = 0, totalRows = 0, incCount = 0;
+    const csv = [];
+    csv.push('increment,time_increment,node,U1,U2,U3');
+
+    while (i < n) {
+      const mInc = lines[i]?.match(incHeader);
+      if (!mInc) { i++; continue; }
+      const incIndex = parseInt(mInc[1], 10);
+      incCount++;
+      if (incCount % 10 === 0) setStatus(`Scanning increment ${incIndex}…`);
+
+      // Find time increment completed
+      i++;
+      let timeInc = null, j = i;
+      for (; j < n; j++) {
+        const t = lines[j];
+        const mt = t.match(timeLine);
+        if (mt) { timeInc = parseFloat(mt[1]); break; }
+        if (incHeader.test(t)) break; // unexpected next increment
+      }
+      i = j;
+
+      // Find "NODE OUTPUT" following this increment
+      for (; i < n; i++) {
+        const { nospace } = normalize(lines[i]);
+        if (nospace === nodeOutputMarker) break;
+        if (incHeader.test(lines[i])) break; // no node output for this increment
+      }
+      if (i >= n || normalize(lines[i]).nospace !== nodeOutputMarker) continue;
+
+      // Find header row "NODE FOOT- U1 U2 U3"
+      for (i++; i < n && !headerRow.test(lines[i]); i++) { /* skip */ }
+      if (i >= n) break;
+
+      // Read numeric rows
+      for (i++; i < n; i++) {
+        const s = lines[i];
+        if (isStop(s)) break;
+        const m = s.match(numRow);
+        if (!m) continue;
+        const node = m[1], u1 = m[2], u2 = m[3], u3 = m[4];
+        csv.push(`${incIndex},${timeInc ?? ''},${node},${u1},${u2},${u3}`);
+        totalRows++;
+      }
+    }
+    return { csvText: csv.join('\n'), totalRows, increments: incCount };
+  }
+
+  async function handleParse() {
+    if (!currentFile) return;
+    setStatus('Reading file…');
+    const text = await currentFile.text(); // FileReader via blob
+    log(`Loaded ${currentFile.name} (${humanSize(currentFile.size)}), ${text.length.toLocaleString()} chars`);
+
+    setStatus('Parsing…');
+    const t0 = performance.now();
+    const { csvText, totalRows, increments } = parseDatToCsv(text);
+    const t1 = performance.now();
+
+    // Create Blob URL and show download
+    const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
+    csvBlobUrl = URL.createObjectURL(blob);
+    downloadLink.href = csvBlobUrl;
+    downloadLink.style.display = 'inline-block';
+    downloadLink.download = (currentFile.name.replace(/\.dat$/i,'') || 'output') + '_node_displacements_by_increment.csv';
+
+    statsEl.style.display = 'inline-block';
+    statsEl.textContent = `Rows: ${totalRows.toLocaleString()} · Increments seen: ${increments}`;
+
+    log(`Parsed ${totalRows.toLocaleString()} rows across ${increments} increments in ${(t1 - t0).toFixed(1)} ms`);
+    setStatus('Done ✓');
+
+    // Preview first 10 rows
+    previewBody.innerHTML = '';
+    const lines = csvText.split('\n').slice(1, 11);
+    for (const row of lines) {
+      if (!row.trim()) continue;
+      const [inc, time, node, U1, U2, U3] = row.split(',');
+      const tr = document.createElement('tr');
+      for (const v of [inc, time, node, U1, U2, U3]) {
+        const td = document.createElement('td'); td.textContent = v; tr.appendChild(td);
+      }
+      previewBody.appendChild(tr);
+    }
+    preview.style.display = lines.length ? 'table' : 'none';
+  }
+
+  function handleClear() {
+    currentFile = null;
+    if (csvBlobUrl) { URL.revokeObjectURL(csvBlobUrl); csvBlobUrl = null; }
+    fileInput.value = '';
+    parseBtn.disabled = true;
+    downloadLink.style.display = 'none';
+    preview.style.display = 'none';
+    previewBody.innerHTML = '';
+    fnameEl.style.display = fsizeEl.style.display = statsEl.style.display = 'none';
+    logEl.textContent = '';
+    setStatus('');
+  }
+
+  armDrop();
+  parseBtn.addEventListener('click', handleParse);
+  clearBtn.addEventListener('click', handleClear);
+})();
+</script>
+</body>
+</html>

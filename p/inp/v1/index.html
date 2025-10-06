@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>INP Surface Parser</title>
+<style>
+  :root {
+    --bg:#0b1220; --card:#121b2f; --ink:#e9f0ff; --muted:#9cb0d6; --accent:#7cc0ff; --accent2:#9ff0a8;
+    --panel:#ffffff; --panelInk:#0b1220;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;
+    color:var(--ink); background:linear-gradient(180deg,#0a1020,#0e1630 40%,#0a1020);
+    display:flex; flex-direction:column;
+  }
+  header{padding:18px 20px 0; display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+  h1{font-size:20px; margin:0 8px 0 0; font-weight:700}
+  .sub{color:var(--muted); font-size:14px}
+  .page{display:flex; gap:14px; padding:14px 16px 18px; height:calc(100% - 64px)}
+  .left{flex:1 1 56%; min-width:420px; overflow:auto}
+  .right{flex:1 1 44%; min-width:360px; background:var(--panel); color:var(--panelInk); border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:8px}
+  .right h3{margin:0 0 4px 2px; font-size:16px}
+  .canvasWrap{flex:1 1 auto; border:1px solid #d7dbe7; border-radius:12px; position:relative; background:#fff; min-height:260px}
+  canvas{display:block; width:100%; height:100%; cursor:grab}
+  canvas.dragging{cursor:grabbing}
+  .hud{position:absolute; left:8px; top:8px; padding:4px 8px; background:rgba(255,255,255,.85); border:1px solid #cbd5e1; border-radius:8px; font-size:12px; color:#0b1220}
+  .wrapNarrow{max-width:1220px; margin:0 auto; width:100%}
+  .drops{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px}
+  .drop{
+    border:2px dashed #2b3f6b; border-radius:16px; padding:18px; text-align:center;
+    background:rgba(18,27,47,.6); backdrop-filter: blur(3px);
+  }
+  .drop.drag{border-color:var(--accent); box-shadow:0 0 0 3px rgba(124,192,255,.2) inset}
+  .btn{cursor:pointer; background:var(--accent); color:#041428; padding:9px 12px; border:none; border-radius:12px; font-weight:700}
+  .btn.green{background:var(--accent2); color:#06210a}
+  .btn:disabled{opacity:.5; cursor:not-allowed}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:12px; margin-top:12px}
+  .card{background:var(--card); border:1px solid #223055; border-radius:16px; padding:12px 12px 14px}
+  .card h2{margin:2px 0 6px; font-size:16px}
+  .kv{font-size:13px; color:var(--muted); margin:2px 0}
+  .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
+  .surf{
+    display:flex; flex-direction:column; gap:8px; background:#0f1a33; border:1px solid #23325a;
+    border-radius:12px; padding:10px; margin-top:8px
+  }
+  .row{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap}
+  .muted{color:var(--muted)} .tiny{font-size:12px}
+  .btnbar{display:flex; gap:8px; flex-wrap:wrap}
+</style>
+</head>
+<body>
+  <header class="wrapNarrow">
+    <h1>INP Surface Parser</h1>
+  </header>
+
+  <div class="page wrapNarrow">
+    <section class="left">
+      <div class="drops">
+        <div id="dropAsm" class="drop">
+          <p style="margin:2px 0 6px"><b>Assembly INP</b> (with <span class="mono">*Part</span> blocks)</p>
+          <p><label class="btn" for="fileAsm">Choose file</label></p>
+          <input id="fileAsm" type="file" accept=".inp,.txt" style="display:none" />
+          <p class="tiny muted">Comments starting with <span class="mono">**</span> are removed.</p>
+        </div>
+        <div id="dropSingle" class="drop">
+          <p style="margin:2px 0 6px"><b>Single-Part INP</b> (no <span class="mono">*Part</span> / <span class="mono">*End Part</span>)</p>
+          <p><label class="btn" for="fileSingle">Choose file</label></p>
+          <input id="fileSingle" type="file" accept=".inp,.txt" style="display:none" />
+          <p class="tiny muted">Parses global <span class="mono">*NODE</span>, <span class="mono">*ELEMENT</span>, <span class="mono">*Elset</span>, <span class="mono">*Surface</span>.</p>
+        </div>
+      </div>
+
+      <section id="out"></section>
+    </section>
+
+    <aside class="right">
+      <h3 id="vizTitle">Surface viewer</h3>
+      <div class="tiny" id="vizMeta" style="margin:0 2px 4px;color:#465060"></div>
+      <div class="canvasWrap" id="canvasWrap">
+        <canvas id="viz"></canvas>
+        <div class="hud">Drag: rotate • Wheel: zoom • Shift+Drag: pan • Dbl-click: reset</div>
+      </div>
+    </aside>
+  </div>
+
+<script>
+/* ========================== helpers ========================== */
+function cleanLines(text){
+  return text.replace(/\r/g,'')
+             .split('\n')
+             .filter(line => !/^\s*\*\*/.test(line)); // drop comment lines
+}
+function parseCsvTokens(chunk){
+  return chunk.replace(/[^0-9,.\s\-+eE]/g,' ')
+              .split(/[, \t\n]+/)
+              .filter(t => t.length>0);
+}
+function toInts(tokens){ return tokens.map(x => parseInt(x,10)).filter(Number.isFinite); }
+function download(filename, text, mime='text/csv'){
+  const blob = new Blob([text], {type: mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+const FACE_MAP = { // tetra faces using first 4 corner nodes
+  'S1': n => [n[0],n[1],n[2]],
+  'S2': n => [n[0],n[3],n[1]],
+  'S3': n => [n[1],n[3],n[2]],
+  'S4': n => [n[2],n[3],n[0]],
+};
+
+/* ========================== parsing ========================== */
+// shared block parser
+function parseWithin(lines, iStart, iEnd){
+  const data = { nodes:new Map(), elements:new Map(), elsets:new Map(), surfaces:[] };
+  let i = iStart;
+  while(i < iEnd){
+    const cur = lines[i].trim();
+
+    // *NODE
+    if(/^\*node\b/i.test(cur)){
+      i++;
+      while(i<iEnd){
+        const s = lines[i].trim();
+        if(s.startsWith('*') || s.length===0) break;
+        const t = parseCsvTokens(s);
+        if(t.length>=4){
+          const id = parseInt(t[0],10);
+          const x = parseFloat(t[1]), y = parseFloat(t[2]), z = parseFloat(t[3]);
+          if(Number.isFinite(id)) data.nodes.set(id,[x,y,z]);
+        }
+        i++;
+      }
+      continue;
+    }
+    // *ELEMENT
+    if(/^\*element\b/i.test(cur)){
+      i++;
+      while(i<iEnd){
+        const s = lines[i].trim();
+        if(s.startsWith('*') || s.length===0) break;
+        const nums = toInts(parseCsvTokens(s));
+        if(nums.length>=5){
+          const eid = nums[0];
+          const nodes = nums.slice(1,5); // first 4 corner nodes
+          data.elements.set(eid, nodes);
+        }
+        i++;
+      }
+      continue;
+    }
+    // *Elset
+    if(/^\*elset\b/i.test(cur)){
+      const nm = /elset\s*=\s*([^,\s]+)/i.exec(cur);
+      const setName = nm ? nm[1] : `ELSET_${data.elsets.size+1}`;
+      const ids=[];
+      i++;
+      while(i<iEnd){
+        const s = lines[i].trim();
+        if(s.startsWith('*') || s.length===0) break;
+        ids.push(...toInts(parseCsvTokens(s)));
+        i++;
+      }
+      data.elsets.set(setName,new Set(ids));
+      continue;
+    }
+    // *Surface, type=ELEMENT
+    if(/^\*surface\b/i.test(cur) && /type\s*=\s*element/i.test(cur)){
+      const sm = /name\s*=\s*([^,\s]+)/i.exec(cur);
+      const surfName = sm ? sm[1] : `Surf_${data.surfaces.length+1}`;
+      const items=[];
+      i++;
+      while(i<iEnd){
+        const s = lines[i].trim();
+        if(s.startsWith('*') || s.length===0) break;
+        const m = s.split(/[, \t]+/).filter(Boolean);
+        if(m.length>=2){
+          const elsetRef = m[0];
+          const face = m[1].toUpperCase();
+          if(/^S[1-4]$/.test(face)) items.push({elset:elsetRef, face});
+        }
+        i++;
+      }
+      data.surfaces.push({name:surfName, items});
+      continue;
+    }
+
+    i++;
+  }
+  return data;
+}
+
+function parseAssembly(lines){
+  // split by *Part ... *End Part
+  const parts = [];
+  for(let i=0;i<lines.length;i++){
+    const l = lines[i].trim();
+    if(/^\*part\b/i.test(l)){
+      const name = /name\s*=\s*([^,\s]+)/i.exec(l)?.[1] || `Part_${parts.length+1}`;
+      let j=i+1;
+      while(j<lines.length && !/^\*end\s+part\b/i.test(lines[j].trim())) j++;
+      const block = parseWithin(lines, i+1, j);
+      parts.push({name, ...block});
+      if(j<lines.length) i=j; // skip *End Part
+    }
+  }
+  return parts;
+}
+
+function parseSingle(lines){
+  const block = parseWithin(lines, 0, lines.length);
+  return [{name:'global', ...block}];
+}
+
+/* ========================== surface data builders ========================== */
+function buildCombined(part, surface){
+  const seenEF = new Set();
+  const faceRows = []; // [part,surface,element,node1,node2,node3]
+  const nodesUsed = new Set();
+
+  for(const item of surface.items){
+    const set = part.elsets.get(item.elset);
+    const pick = FACE_MAP[item.face];
+    if(!set || !pick) continue;
+    for(const eid of set){
+      const key = eid+'|'+item.face;
+      if(seenEF.has(key)) continue;
+      const nodes = part.elements.get(eid);
+      if(!nodes || nodes.length<4) continue;
+      const [a,b,c] = pick(nodes);
+      faceRows.push([part.name, surface.name, eid, a,b,c]);
+      nodesUsed.add(a); nodesUsed.add(b); nodesUsed.add(c);
+      seenEF.add(key);
+    }
+  }
+
+  faceRows.sort((A,B)=> A[2]-B[2] || A[3]-B[3] || A[4]-B[4] || A[5]-B[5]);
+  const nodeRows = Array.from(nodesUsed).sort((a,b)=>a-b).map(n=>{
+    const xyz = part.nodes.get(n) || [NaN,NaN,NaN];
+    return [part.name, surface.name, n, ...xyz];
+  });
+
+  const facesCsv = 'part,surface,element,node1,node2,node3\n' + faceRows.map(r=>r.join(',')).join('\n');
+  const nodesCsv = 'part,surface,node,x,y,z\n' + nodeRows.map(r=>r.join(',')).join('\n');
+  return {facesCsv, nodesCsv, facesCount: faceRows.length, nodeCount: nodeRows.length, tris: faceRows.map(r=>r.slice(3,6))};
+}
+
+/* ========================== UI: drops & results ========================== */
+const out = document.getElementById('out');
+
+setupDrop('Asm', f => handleFile(f, true));
+setupDrop('Single', f => handleFile(f, false));
+
+function setupDrop(suffix, onFile){
+  const dz = document.getElementById('drop'+suffix);
+  const inp = document.getElementById('file'+suffix);
+  ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e=>{
+    e.preventDefault(); e.stopPropagation(); dz.classList.add('drag');
+  }));
+  ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e=>{
+    e.preventDefault(); e.stopPropagation(); dz.classList.remove('drag');
+  }));
+  dz.addEventListener('drop', e=>{ const f=e.dataTransfer.files[0]; if(f) onFile(f); });
+  inp.addEventListener('change', e=>{ const f=e.target.files[0]; if(f) onFile(f); });
+}
+
+function handleFile(file, isAssembly){
+  const r = new FileReader();
+  r.onload = ()=>{
+    const lines = cleanLines(String(r.result));
+    // If assembly drop used but no *Part blocks, fall back to single-part.
+    let parts = isAssembly ? parseAssembly(lines) : parseSingle(lines);
+    if(parts.length===0 && isAssembly){ parts = parseSingle(lines); }
+    render(parts, file.name);
+  };
+  r.readAsText(file);
+}
+
+function render(parts, filename){
+  out.innerHTML = '';
+  if(parts.length===0){
+    out.innerHTML = `<p class="muted">No parsable content found in <b>${filename}</b>.</p>`;
+    return;
+  }
+
+  const grid = document.createElement('div'); grid.className = 'grid';
+  for(const part of parts){
+    const card = document.createElement('div'); card.className='card';
+    card.innerHTML = `
+      <h2>Part: <span class="mono">${part.name}</span></h2>
+      <div class="kv">Nodes: <b>${part.nodes.size}</b> • Elements: <b>${part.elements.size}</b> • Elsets: <b>${part.elsets.size}</b> • Surfaces: <b>${part.surfaces.length}</b></div>
+      <div class="kv tiny">Surfaces are combined across S1–S4 (tet corner nodes only).</div>
+    `;
+    if(part.surfaces.length===0){
+      card.insertAdjacentHTML('beforeend', `<div class="surf"><div class="muted">No element-type surfaces in this part.</div></div>`);
+    }
+
+    for(const surface of part.surfaces){
+      const {facesCsv,nodesCsv,facesCount,nodeCount,tris} = buildCombined(part, surface);
+
+      const block = document.createElement('div'); block.className='surf';
+      block.innerHTML = `
+        <div class="row">
+          <div>
+            <strong class="mono">${surface.name}</strong>
+            <div class="tiny muted">Combined faces: <b>${facesCount}</b> • Unique nodes: <b>${nodeCount}</b></div>
+          </div>
+          <div class="btnbar">
+            <button class="btn" ${facesCount===0?'disabled':''}>Download faces</button>
+            <button class="btn" ${nodeCount===0?'disabled':''}>Download nodes</button>
+            <button class="btn green" ${facesCount===0?'disabled':''}>Visualize</button>
+          </div>
+        </div>
+      `;
+      const [btnFaces, btnNodes, btnViz] = block.querySelectorAll('button');
+
+      btnFaces.addEventListener('click', ()=>{
+        const fn = `${safe(part.name)}__${safe(surface.name)}__faces.csv`;
+        download(fn, facesCsv);
+      });
+      btnNodes.addEventListener('click', ()=>{
+        const fn = `${safe(part.name)}__${safe(surface.name)}__nodes.csv`;
+        download(fn, nodesCsv);
+      });
+      btnViz.addEventListener('click', ()=>{
+        const mesh = buildMeshForViz(part, tris);
+        showInViewer(mesh, part.name, surface.name);
+      });
+
+      card.appendChild(block);
+    }
+
+    grid.appendChild(card);
+  }
+  out.appendChild(grid);
+}
+function safe(s){ return String(s).replace(/[^\w.-]+/g,'_'); }
+
+/* ========================== viewer (stable sizing) ========================== */
+const canvas = document.getElementById('viz');
+const wrap   = document.getElementById('canvasWrap');
+const vizTitle = document.getElementById('vizTitle');
+const vizMeta  = document.getElementById('vizMeta');
+let ctx = canvas.getContext('2d');
+let CW=0, CH=0; // bitmap size in px
+let resizeRAF = null;
+
+// *** IMPORTANT FIX ***
+// Observe the WRAPPER (content box), not the canvas.
+// Recompute canvas bitmap size from wrapper's client rect, avoiding resize loops.
+const ro = new ResizeObserver(entries => {
+  const entry = entries[0];
+  if(!entry) return;
+  if(resizeRAF) cancelAnimationFrame(resizeRAF);
+  resizeRAF = requestAnimationFrame(()=>{
+    const rect = wrap.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1); // clamp DPR for perf
+    const w = Math.max(200, Math.floor(rect.width * dpr));
+    const h = Math.max(200, Math.floor(rect.height * dpr));
+    if(w!==CW || h!==CH){
+      CW = w; CH = h;
+      canvas.width = CW; canvas.height = CH; // bitmap only; CSS stays 100%
+      draw();
+    }
+  });
+});
+ro.observe(wrap);
+
+function buildMeshForViz(part, faceTriples){
+  const nodeIds = new Set();
+  faceTriples.forEach(t=>{ t.forEach(n=>nodeIds.add(n)); });
+  const idToIdx = new Map();
+  const verts = [];
+  Array.from(nodeIds).forEach((nid, idx)=>{
+    idToIdx.set(nid, idx);
+    const xyz = part.nodes.get(nid) || [0,0,0];
+    verts.push({id:nid, x:xyz[0], y:xyz[1], z:xyz[2]});
+  });
+  const faces = faceTriples.map(t=>t.map(n=>idToIdx.get(n)));
+  return {verts, faces};
+}
+
+// interactive renderer (same math, more robust handling)
+const state = {
+  rx: 0.6, ry: -0.8, tx: 0, ty: 0, zoom: 1.0,
+  cx: 0, cy: 0, cz: 0, scale: 1, verts: [], faces: [],
+};
+let drag=null;
+
+canvas.addEventListener('mousedown', e=>{
+  const rect = canvas.getBoundingClientRect();
+  drag = {x:e.clientX-rect.left, y:e.clientY-rect.top, rx:state.rx, ry:state.ry, tx:state.tx, ty:state.ty, shift:e.shiftKey};
+  canvas.classList.add('dragging');
+});
+window.addEventListener('mouseup', ()=>{ drag=null; canvas.classList.remove('dragging'); });
+window.addEventListener('mousemove', e=>{
+  if(!drag) return;
+  const rect = canvas.getBoundingClientRect();
+  const nx = e.clientX-rect.left, ny = e.clientY-rect.top;
+  const dx = nx - drag.x, dy = ny - drag.y;
+  if(e.shiftKey || drag.shift){ // pan
+    state.tx = drag.tx + dx / (120 * state.zoom);
+    state.ty = drag.ty + dy / (120 * state.zoom);
+  }else{ // rotate
+    state.ry = drag.ry + dx * 0.01;
+    state.rx = drag.rx + dy * 0.01;
+  }
+  draw();
+});
+canvas.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const k = Math.exp(-e.deltaY * 0.001);
+  state.zoom = Math.max(0.05, Math.min(20, state.zoom * k));
+  draw();
+},{passive:false});
+canvas.addEventListener('dblclick', ()=>{
+  state.rx=0.6; state.ry=-0.8; state.tx=0; state.ty=0; state.zoom=1.0;
+  draw();
+});
+
+function centerAndScale(verts){
+  if(!verts.length) return;
+  let minX=Infinity,minY=Infinity,minZ=Infinity,maxX=-Infinity,maxY=-Infinity,maxZ=-Infinity;
+  for(const v of verts){ if(!isFinite(v.x+v.y+v.z)) continue;
+    if(v.x<minX)minX=v.x; if(v.y<minY)minY=v.y; if(v.z<minZ)minZ=v.z;
+    if(v.x>maxX)maxX=v.x; if(v.y>maxY)maxY=v.y; if(v.z>maxZ)maxZ=v.z;
+  }
+  const cx=(minX+maxX)/2, cy=(minY+maxY)/2, cz=(minZ+maxZ)/2;
+  const size = Math.max(maxX-minX, maxY-minY, maxZ-minZ) || 1;
+  state.cx=cx; state.cy=cy; state.cz=cz;
+  state.scale = 0.9 * Math.min(CW,CH) / size;
+}
+
+function showInViewer(mesh, partName, surfName){
+  state.verts = mesh.verts; state.faces = mesh.faces;
+  centerAndScale(state.verts);
+  vizTitle.textContent = `Surface viewer — ${surfName}`;
+  vizMeta.textContent = `Part: ${partName} • Verts: ${state.verts.length} • Tris: ${state.faces.length}`;
+  draw();
+}
+
+function draw(){
+  if(!ctx) return;
+  ctx.clearRect(0,0,CW,CH);
+  ctx.save();
+  ctx.translate(CW/2, CH/2);
+  ctx.scale(1, -1);
+
+  const sinx=Math.sin(state.rx), cosx=Math.cos(state.rx);
+  const siny=Math.sin(state.ry), cosy=Math.cos(state.ry);
+
+  const proj = state.verts.map(v=>{
+    let x = (v.x - state.cx), y = (v.y - state.cy), z = (v.z - state.cz);
+    let y1 = y*cosx - z*sinx, z1 = y*sinx + z*cosx;
+    let x2 = x*cosy + z1*siny, z2 = -x*siny + z1*cosy;
+    const s = state.scale * state.zoom;
+    return {x: x2*s + state.tx*CW/2, y: y1*s + state.ty*CH/2, z: z2};
+  });
+
+  const order = state.faces.map((f,idx)=>{
+    const z = (proj[f[0]].z + proj[f[1]].z + proj[f[2]].z)/3;
+    return {idx, z};
+  }).sort((a,b)=> a.z - b.z);
+
+  for(const o of order){
+    const f = state.faces[o.idx];
+    const a=proj[f[0]], b=proj[f[1]], c=proj[f[2]];
+    ctx.beginPath();
+    ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.lineTo(c.x,c.y); ctx.closePath();
+    ctx.fillStyle = 'rgba(100,150,255,0.25)';
+    ctx.strokeStyle = 'rgba(40,80,160,0.9)';
+    ctx.lineWidth = 1;
+    ctx.fill(); ctx.stroke();
+  }
+
+  // points
+  ctx.fillStyle = 'rgba(10,20,40,0.9)';
+  for(const p of proj){ ctx.beginPath(); ctx.arc(p.x,p.y,2,0,Math.PI*2); ctx.fill(); }
+
+  ctx.restore();
+}
+</script>
+</body>
+</html>
