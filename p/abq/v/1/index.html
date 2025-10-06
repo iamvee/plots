@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>INP + DAT Parser/Viewer</title>
+<title>INP Surface Parser + Viewer + DAT→CSV + Volumes</title>
 <style>
   :root {
     --bg:#0b1220; --card:#121b2f; --ink:#e9f0ff; --muted:#9cb0d6; --accent:#7cc0ff; --accent2:#9ff0a8;
@@ -21,19 +21,13 @@
   h1{font-size:20px; margin:0 8px 0 0; font-weight:700}
   .sub{color:var(--muted); font-size:14px}
 
-  /* 3-column page */
-  .page{
-    display:grid; grid-template-columns: 1.2fr 1fr 1.1fr; gap:14px;
-    padding:14px 16px 18px; height:calc(100% - 64px); max-width:1700px; margin:0 auto;
-  }
+  .page{display:grid; grid-template-columns: 1.2fr 1fr 1.1fr; gap:14px;
+        padding:14px 16px 18px; height:calc(100% - 64px); max-width:1700px; margin:0 auto;}
   .col{min-width:340px; overflow:auto}
 
-  /* Left (INP lists) + Middle (viewer) */
   .drops{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px}
-  .drop{
-    border:2px dashed #2b3f6b; border-radius:16px; padding:18px; text-align:center;
-    background:rgba(18,27,47,.6); backdrop-filter: blur(3px);
-  }
+  .drop{border:2px dashed #2b3f6b; border-radius:16px; padding:18px; text-align:center;
+        background:rgba(18,27,47,.6); backdrop-filter: blur(3px);}
   .drop.drag{border-color:var(--accent); box-shadow:0 0 0 3px rgba(124,192,255,.2) inset}
   .btn{cursor:pointer; background:var(--accent); color:#041428; padding:9px 12px; border:none; border-radius:12px; font-weight:700}
   .btn.green{background:var(--accent2); color:#06210a}
@@ -45,36 +39,36 @@
   .card h2{margin:2px 0 6px; font-size:16px}
   .kv{font-size:13px; color:var(--muted); margin:2px 0}
   .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace}
-  .surf{
-    display:flex; flex-direction:column; gap:8px; background:#0f1a33; border:1px solid #23325a;
-    border-radius:12px; padding:10px; margin-top:8px
-  }
+  .surf{display:flex; flex-direction:column; gap:8px; background:#0f1a33; border:1px solid #23325a;
+        border-radius:12px; padding:10px; margin-top:8px}
   .row{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap}
   .muted{color:var(--muted)} .tiny{font-size:12px}
   .btnbar{display:flex; gap:8px; flex-wrap:wrap}
 
-  .viewer{
-    background:var(--panel); color:var(--panelInk); border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:8px
-  }
+  .viewer{background:var(--panel); color:var(--panelInk); border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:8px}
   .viewer h3{margin:0 0 4px 2px; font-size:16px}
   .canvasWrap{flex:1 1 auto; border:1px solid #d7dbe7; border-radius:12px; position:relative; background:#fff; min-height:260px}
   canvas{display:block; width:100%; height:100%; cursor:grab}
   canvas.dragging{cursor:grabbing}
-  .hud{position:absolute; left:8px; top:8px; padding:4px 8px; background:rgba(255,255,255,.85); border:1px solid #cbd5e1; border-radius:8px; font-size:12px; color:#0b1220}
-  .controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap; border:1px solid #e3e7ef; background:#f9fbff; border-radius:10px; padding:6px 8px}
+  .hud{position:absolute; left:8px; top:8px; padding:4px 8px; background:rgba(255,255,255,.85);
+       border:1px solid #cbd5e1; border-radius:8px; font-size:12px; color:#0b1220}
+
+  .controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap; border:1px solid #e3e7ef;
+            background:#f9fbff; border-radius:10px; padding:6px 8px}
   .controls label{font-size:12px; color:#334}
   .ctrlVal{min-width:42px; text-align:right; font-variant-numeric:tabular-nums}
   .sep{width:1px; background:#d9dfeb; height:20px}
 
-  /* Right column (DAT parser) */
+  .refPanel{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .refPanel input{width:88px; padding:6px 8px; border:1px solid #ccd6ea; border-radius:8px}
+  .pill{background:#eef3ff; border:1px solid #d7e0f6; padding:6px 8px; border-radius:10px; font-size:12px; color:#445}
+
   .datCol{background:var(--dat-bg); color:var(--dat-ink); border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:10px; border:1px solid #232742}
   .datCard{background:var(--dat-card); border:1px solid #232742; border-radius:14px; padding:14px}
   .datTitle{margin:0 0 4px; font-size:16px}
   .datSmall{color:var(--dat-muted); margin:0 0 6px; font-size:13px}
-  .datDrop{
-    display:flex; align-items:center; justify-content:center; gap:10px; min-height:120px;
-    border:2px dashed #2b3152; border-radius:14px; background:#121530; cursor:pointer; transition:.2s
-  }
+  .datDrop{display:flex; align-items:center; justify-content:center; gap:10px; min-height:120px;
+           border:2px dashed #2b3152; border-radius:14px; background:#121530; cursor:pointer; transition:.2s}
   .datDrop:hover{border-color:#3a426e}
   .datDrop.drag{border-color:var(--dat-accent); background:#121a3a}
   .datControls{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px}
@@ -94,6 +88,7 @@
 <body>
   <header>
     <h1>INP Surface Parser</h1>
+    <span class="sub">Assembly & Single-Part • Viewer • DAT→CSV • Deformed surfaces • Volumes</span>
   </header>
 
   <div class="page">
@@ -120,6 +115,8 @@
     <div class="col viewer">
       <h3 id="vizTitle">Surface viewer</h3>
       <div class="tiny" id="vizMeta" style="margin:0 2px 4px;color:#465060"></div>
+
+      <!-- Deform controls (appear after Deform) -->
       <div class="controls" id="deformControls" style="display:none">
         <label>Increment:
           <input id="incSlider" type="range" min="1" max="1" step="1" value="1" style="vertical-align:middle">
@@ -133,9 +130,38 @@
         <div class="sep"></div>
         <span id="timeLabel" class="tiny" style="color:#334"></span>
       </div>
+
+      <!-- Reference point & volume tools (show whenever a surface is selected) -->
+      <div class="controls" id="refControls" style="display:none">
+        <div class="refPanel">
+          <span class="pill">Ref point (x, y, z):</span>
+          <input id="refX" type="number" step="any" placeholder="x">
+          <input id="refY" type="number" step="any" placeholder="y">
+          <input id="refZ" type="number" step="any" placeholder="z">
+          <button id="setRef" class="btn">Set point</button>
+          <button id="togglePreview" class="btn softer" disabled>Check volume</button>
+          <button id="runSeries" class="btn green" disabled>Compute volume series</button>
+          <a id="volCsv" class="btn" style="display:none" download="volume_series.csv">Download CSV</a>
+        </div>
+      </div>
+
       <div class="canvasWrap" id="canvasWrap">
         <canvas id="viz"></canvas>
         <div class="hud">Drag: rotate • Wheel: zoom • Shift+Drag: pan • Dbl-click: reset</div>
+      </div>
+
+      <div id="volTableWrap" class="controls" style="display:none">
+        <span class="pill">Volume table</span>
+        <div style="flex-basis:100%; overflow:auto; max-height:240px; border:1px solid #dfe6f6; border-radius:10px">
+          <table id="volTable" style="width:max(480px,100%); border-collapse:collapse">
+            <thead><tr>
+              <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #e9eefb">increment</th>
+              <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #e9eefb">time_increment</th>
+              <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #e9eefb">volume</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -143,7 +169,8 @@
     <div class="col datCol">
       <div class="datCard">
         <h3 class="datTitle">Abaqus DAT → CSV (Increment Node Output)</h3>
-        <p class="datSmall">Drop a <code>.dat</code> file or click to choose. Exports CSV: <code>increment,time_increment,node,U1,U2,U3</code>. Also powers the <b>Deform</b> button.</p>
+        <p class="datSmall">Drop a <code>.dat</code> or click to choose. Exports CSV and powers <b>Deform</b> & volume series:
+        <code>increment,time_increment,node,U1,U2,U3</code>.</p>
         <div id="datDrop" class="datDrop" tabindex="0" role="button" aria-label="Drop DAT file here or click to choose">
           <span>📄 Drop <em>.dat</em> file here or click to choose</span>
           <input id="datFile" type="file" accept=".dat,text/plain" hidden />
@@ -287,7 +314,7 @@ function render(parts, filename){
       const [btnFaces, btnNodes, btnViz, btnDef] = block.querySelectorAll('button');
       btnFaces.addEventListener('click', ()=>download(`${safe(part.name)}__${safe(surface.name)}__faces.csv`, facesCsv));
       btnNodes.addEventListener('click', ()=>download(`${safe(part.name)}__${safe(surface.name)}__nodes.csv`, nodesCsv));
-      btnViz.addEventListener('click', ()=>{ const mesh=buildMeshForViz(part, tris); showInViewer(mesh, part.name, surface.name); hideDeformControls(); });
+      btnViz.addEventListener('click', ()=>{ const mesh=buildMeshForViz(part, tris); showInViewer(mesh, part.name, surface.name, {showRef:true}); currentContext={part,surface,tris,nodeSet,mesh}; disableVolumeButtons(); });
       btnDef.addEventListener('click', ()=> startDeform(part, surface, tris, nodeSet));
       card.appendChild(block);
     }
@@ -298,7 +325,7 @@ function render(parts, filename){
 }
 function safe(s){ return String(s).replace(/[^\w.-]+/g,'_'); }
 
-/* ---------- Stable viewer sizing & interaction ---------- */
+/* ---------- Viewer sizing & interaction ---------- */
 const canvas = document.getElementById('viz');
 const wrap   = document.getElementById('canvasWrap');
 const vizTitle = document.getElementById('vizTitle');
@@ -309,6 +336,17 @@ const incLabel  = document.getElementById('incLabel');
 const scaleSlider = document.getElementById('scaleSlider');
 const scaleLabel  = document.getElementById('scaleLabel');
 const timeLabel   = document.getElementById('timeLabel');
+
+const refControls = document.getElementById('refControls');
+const refX = document.getElementById('refX');
+const refY = document.getElementById('refY');
+const refZ = document.getElementById('refZ');
+const setRef = document.getElementById('setRef');
+const togglePreview = document.getElementById('togglePreview');
+const runSeries = document.getElementById('runSeries');
+const volCsv = document.getElementById('volCsv');
+const volTableWrap = document.getElementById('volTableWrap');
+const volTableBody = document.querySelector('#volTable tbody');
 
 let ctx = canvas.getContext('2d');
 let CW=0,CH=0, resizeRAF=null;
@@ -332,8 +370,13 @@ function buildMeshForViz(part, faceTriples){
   return {verts, faces, id2i};
 }
 
-const state={rx:0.6, ry:-0.8, tx:0, ty:0, zoom:1.0, cx:0, cy:0, cz:0, scale:1, verts:[], faces:[],
-             baseVerts:[], overlayVerts:null, overlayFaces:null};
+/* render state */
+const state={
+  rx:0.6, ry:-0.8, tx:0, ty:0, zoom:1.0, cx:0, cy:0, cz:0, scale:1,
+  verts:[], faces:[], baseVerts:[],
+  overlayVerts:null, overlayFaces:null,
+  showRef:false, refPoint:null, showPreview:false,
+};
 let drag=null;
 
 canvas.addEventListener('mousedown', e=>{
@@ -370,18 +413,20 @@ function centerAndScale(verts){
   state.scale = 0.9 * Math.min(CW,CH) / size;
 }
 
-function showInViewer(mesh, partName, surfName){
+function showInViewer(mesh, partName, surfName,{showRef=false}={}){
   state.verts=mesh.verts; state.faces=mesh.faces;
   state.baseVerts = mesh.verts.map(v=>({x:v.x,y:v.y,z:v.z,id:v.id}));
   state.overlayVerts=null; state.overlayFaces=null;
+  state.showRef=showRef;
   centerAndScale(state.verts);
   vizTitle.textContent = `Surface viewer — ${surfName}`;
   vizMeta.textContent  = `Part: ${partName} • Verts: ${state.verts.length} • Tris: ${state.faces.length}`;
+  refControls.style.display='flex';
   draw();
 }
-
 function hideDeformControls(){ deformControls.style.display='none'; }
 
+/* draw 3D */
 function draw(){
   if(!ctx) return;
   ctx.clearRect(0,0,CW,CH);
@@ -404,7 +449,7 @@ function draw(){
   for(const o of order){
     const f=state.faces[o.idx]; const a=proj[f[0]], b=proj[f[1]], c=proj[f[2]];
     ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.lineTo(c.x,c.y); ctx.closePath();
-    ctx.strokeStyle='rgba(90,100,120,0.9)'; ctx.lineWidth=0.75; ctx.stroke();
+    ctx.strokeStyle='rgba(90,100,120,0.85)'; ctx.lineWidth=0.75; ctx.stroke();
   }
 
   // overlay deformed fill if exists
@@ -424,7 +469,33 @@ function draw(){
     }
   }
 
+  // reference point + preview tethers
+  if(state.refPoint){
+    const rp=projectPoint(state.refPoint);
+    ctx.save();
+    ctx.fillStyle='rgba(210,40,40,0.95)'; ctx.strokeStyle='rgba(210,40,40,0.95)';
+    ctx.beginPath(); ctx.arc(rp.x, rp.y, 3, 0, Math.PI*2); ctx.fill();
+    if(state.showPreview){
+      ctx.strokeStyle='rgba(210,40,40,0.35)'; ctx.lineWidth=0.6;
+      for(const f of state.faces){
+        const a=state.verts[f[0]], b=state.verts[f[1]], c=state.verts[f[2]];
+        const cx = (a.x+b.x+c.x)/3, cy=(a.y+b.y+c.y)/3, cz=(a.z+b.z+c.z)/3;
+        const pc=projectPoint({x:cx,y:cy,z:cz});
+        ctx.beginPath(); ctx.moveTo(rp.x, rp.y); ctx.lineTo(pc.x, pc.y); ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   ctx.restore();
+
+  function projectPoint(v){
+    let x=(v.x-state.cx), y=(v.y-state.cy), z=(v.z-state.cz);
+    let y1 = y*cosx - z*sinx, z1 = y*sinx + z*cosx;
+    let x2 = x*cosy + z1*siny;
+    const s = state.scale*state.zoom;
+    return {x: x2*s + state.tx*CW/2, y: y1*s + state.ty*CH/2};
+  }
 }
 
 /* ======================= DAT parser (native) ======================= */
@@ -460,8 +531,8 @@ function datAccept(f){
   if(datCsvUrl){ URL.revokeObjectURL(datCsvUrl); datCsvUrl=null; }
   datDL.style.display='none';
   datSetStatus('Ready to parse');
+  refreshDeformButtons();
 }
-
 datDrop.addEventListener('click', ()=>datFile.click());
 datDrop.addEventListener('dragover', e=>{ e.preventDefault(); datDrop.classList.add('drag'); });
 datDrop.addEventListener('dragleave', ()=> datDrop.classList.remove('drag'));
@@ -493,7 +564,7 @@ function parseDatToCsv(text){
     if(!mInc){ i++; continue; }
     const incIndex = parseInt(mInc[1],10); incCount++; i++;
 
-    // find time incremental value near this increment
+    // find time increment
     let timeInc = null, j=i;
     for(; j<n; j++){
       const t=lines[j]; const mt=t.match(timeLine);
@@ -502,7 +573,7 @@ function parseDatToCsv(text){
     }
     i=j;
 
-    // find NODE OUTPUT marker
+    // find NODE OUTPUT
     for(; i<n; i++){
       const {nospace}=datNormalize(lines[i]);
       if(nospace===nodeOutputMarker) break;
@@ -510,7 +581,7 @@ function parseDatToCsv(text){
     }
     if(i>=n || datNormalize(lines[i]).nospace!==nodeOutputMarker) continue;
 
-    // skip to header row, then parse data rows
+    // header → rows
     for(i++; i<n && !headerRow.test(lines[i]); i++){}
     if(i>=n) break;
 
@@ -554,7 +625,7 @@ datParse.addEventListener('click', async ()=>{
   datLogLine(`Parsed ${totalRows.toLocaleString()} rows across ${increments} increments in ${(t1-t0).toFixed(1)} ms`);
   datSetStatus('Done ✓');
 
-  // preview first ~200 lines in scrollable table (fits better)
+  // preview first ~200 lines
   datPrevT.innerHTML='';
   const rows = csvText.split('\n').slice(1, 201);
   for(const row of rows){
@@ -571,6 +642,7 @@ datParse.addEventListener('click', async ()=>{
   refreshDeformButtons();
 });
 
+/* Clear DAT */
 datClear.addEventListener('click', ()=>{
   datCurrentFile=null; datFile.value=''; datParse.disabled=true;
   if(datCsvUrl){ URL.revokeObjectURL(datCsvUrl); datCsvUrl=null; }
@@ -578,24 +650,22 @@ datClear.addEventListener('click', ()=>{
   datFname.style.display=datFsize.style.display=datStats.style.display='none';
   datLog.textContent=''; datSetStatus('');
   datState.order.length=0; datState.timeByInc.clear(); datState.uByInc.clear();
-  refreshDeformButtons(); // disable again
+  refreshDeformButtons();
+  disableVolumeButtons();
 });
 
-/* enable/disable "Deform" buttons based on DAT availability */
-function refreshDeformButtons(){
-  const enabled = datState.order.length>0;
-  document.querySelectorAll('.deformBtn').forEach(b=> b.disabled = !enabled);
-}
+/* enable/disable "Deform" based on DAT availability */
+function refreshDeformButtons(){ const enabled = datState.order.length>0;
+  document.querySelectorAll('.deformBtn').forEach(b=> b.disabled = !enabled); }
 
 /* ======== Deformed surface overlay ======== */
-let deformContext = null; // {part, surface, tris, nodeSet, mesh, id2index}
+let currentContext = null; // {part, surface, tris, nodeSet, mesh}
 
 function startDeform(part, surface, tris, nodeSet){
   if(datState.order.length===0){ alert('Load and parse a DAT file first.'); return; }
   const mesh = buildMeshForViz(part, tris);
-  deformContext = {part, surface, tris, nodeSet, mesh, id2index: mesh.id2i};
-
-  showInViewer(mesh, part.name, surface.name);
+  currentContext = {part, surface, tris, nodeSet, mesh};
+  showInViewer(mesh, part.name, surface.name, {showRef:true});
 
   deformControls.style.display='flex';
   incSlider.min = 1;
@@ -605,6 +675,8 @@ function startDeform(part, surface, tris, nodeSet){
   scaleSlider.value = 1;
   scaleLabel.textContent = '1.00×';
   updateOverlayFromControls();
+
+  enableVolumeButtonsIfReady();
 }
 
 incSlider.addEventListener('input', ()=>{
@@ -617,7 +689,7 @@ scaleSlider.addEventListener('input', ()=>{
 });
 
 function updateOverlayFromControls(){
-  if(!deformContext) return;
+  if(!currentContext) return;
   const inc = parseInt(incSlider.value,10);
   const scale = parseFloat(scaleSlider.value);
   timeLabel.textContent = 'Time increment: ' + (datState.timeByInc.get(inc) ?? '—');
@@ -625,17 +697,107 @@ function updateOverlayFromControls(){
   const uMap = datState.uByInc.get(inc);
   if(!uMap){ state.overlayVerts=null; state.overlayFaces=null; draw(); return; }
 
-  // Clone base vertices and apply displacement if available
-  const verts = deformContext.mesh.verts.map(v=>{
-    const u = uMap.get(v.id); // [u1,u2,u3] or undefined
+  const verts = currentContext.mesh.verts.map(v=>{
+    const u = uMap.get(v.id);
     if(u){ return {x: v.x + u[0]*scale, y: v.y + u[1]*scale, z: v.z + u[2]*scale, id:v.id}; }
     return {x:v.x, y:v.y, z:v.z, id:v.id};
   });
 
   state.overlayVerts = verts;
-  state.overlayFaces = deformContext.mesh.faces;
+  state.overlayFaces = currentContext.mesh.faces;
   draw();
 }
+
+/* ================== Reference point & volume ================== */
+setRef.addEventListener('click', ()=>{
+  if(!currentContext){ alert('Select a surface first.'); return; }
+  const x=parseFloat(refX.value), y=parseFloat(refY.value), z=parseFloat(refZ.value);
+  if(![x,y,z].every(Number.isFinite)){ alert('Enter numeric x, y, z.'); return; }
+  state.refPoint = {x,y,z}; state.showRef = true; draw();
+  togglePreview.disabled=false;
+  enableVolumeButtonsIfReady();
+});
+togglePreview.addEventListener('click', ()=>{
+  if(!state.refPoint){ alert('Set a reference point first.'); return; }
+  state.showPreview = !state.showPreview;
+  togglePreview.textContent = state.showPreview ? 'Hide preview' : 'Check volume';
+  draw();
+});
+runSeries.addEventListener('click', ()=>{
+  if(!currentContext){ alert('Select a surface first.'); return; }
+  if(!state.refPoint){ alert('Set a reference point first.'); return; }
+  if(datState.order.length===0){ alert('Load and parse a DAT file first.'); return; }
+  const {part, tris} = currentContext;
+  // Build base nodal positions for fast lookup
+  const base = new Map();
+  for(const v of currentContext.mesh.verts){ base.set(v.id, [v.x,v.y,v.z]); }
+
+  // Helper: volume from triangulated surface + ref point
+  function volumeFrom(ref, getPos){ // getPos(nodeId) -> [x,y,z]
+    let sum=0;
+    for(const t of tris){
+      const a=getPos(t[0]), b=getPos(t[1]), c=getPos(t[2]);
+      const ax=a[0]-ref.x, ay=a[1]-ref.y, az=a[2]-ref.z;
+      const bx=b[0]-ref.x, by=b[1]-ref.y, bz=b[2]-ref.z;
+      const cx=c[0]-ref.x, cy=c[1]-ref.y, cz=c[2]-ref.z;
+      // signed volume of tetra (ref, a, b, c)
+      const vx = ay*(bz*cz - bz*cy) + az*(by*cx - bx*cy) + ax*(by*cz - bz*cy); // (not used)
+      // Use scalar triple product directly:
+      const v = (ax*(by*cz - bz*cy) - ay*(bx*cz - bz*cx) + az*(bx*cy - by*cx)) / 6;
+      sum += Math.abs(v);
+    }
+    return sum;
+  }
+
+  // original (increment 0)
+  const v0 = volumeFrom(state.refPoint, id=>base.get(id));
+
+  const rows = [];
+  rows.push({inc:0, time:'', vol:v0});
+
+  // each increment with true displacements (scale=1)
+  for(const inc of datState.order){
+    const map = datState.uByInc.get(inc) || new Map();
+    const getPos = id=>{
+      const b=base.get(id); const u=map.get(id);
+      if(u) return [b[0]+u[0], b[1]+u[1], b[2]+u[2]];
+      return b;
+    };
+    const v = volumeFrom(state.refPoint, getPos);
+    rows.push({inc, time: datState.timeByInc.get(inc) ?? '', vol:v});
+  }
+
+  // table + csv
+  volTableBody.innerHTML='';
+  const csv = ['increment,time_increment,volume'];
+  for(const r of rows){
+    const tr=document.createElement('tr');
+    const td1=document.createElement('td'); td1.textContent=r.inc; td1.style.padding='6px 8px';
+    const td2=document.createElement('td'); td2.textContent=r.time; td2.style.padding='6px 8px';
+    const td3=document.createElement('td'); td3.textContent=r.vol; td3.style.padding='6px 8px';
+    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+    volTableBody.appendChild(tr);
+    csv.push(`${r.inc},${r.time},${r.vol}`);
+  }
+  volTableWrap.style.display='block';
+  const blob = new Blob([csv.join('\n')], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  volCsv.href=url; volCsv.style.display='inline-block';
+});
+
+/* small helpers */
+function enableVolumeButtonsIfReady(){
+  const ok = !!(currentContext && state.refPoint && datState.order.length>0);
+  runSeries.disabled = !ok;
+}
+function disableVolumeButtons(){
+  runSeries.disabled = true;
+  volCsv.style.display='none';
+  volTableWrap.style.display='none';
+}
+
+function showInViewerWrapper(){/* kept for completeness */}
+/* ========= end script ========= */
 </script>
 </body>
 </html>
