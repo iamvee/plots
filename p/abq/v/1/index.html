@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>INP Surface Parser + Viewer + DAT→CSV + Volumes</title>
+<title>INP Surface Parser • Viewer • DAT→CSV • Deformed surfaces • Volumes • Amplitudes</title>
 <style>
   :root {
     --bg:#0b1220; --card:#121b2f; --ink:#e9f0ff; --muted:#9cb0d6; --accent:#7cc0ff; --accent2:#9ff0a8;
@@ -21,13 +21,16 @@
   h1{font-size:20px; margin:0 8px 0 0; font-weight:700}
   .sub{color:var(--muted); font-size:14px}
 
-  .page{display:grid; grid-template-columns: 1.2fr 1fr 1.1fr; gap:14px;
-        padding:14px 16px 18px; height:calc(100% - 64px); max-width:1700px; margin:0 auto;}
+  /* 3 columns – make viewer ~30% wider than before */
+  .page{
+    display:grid; grid-template-columns: 1.1fr 1.7fr 1.1fr; gap:14px;
+    padding:14px 16px 18px; height:calc(100% - 64px); max-width:1920px; margin:0 auto;
+  }
   .col{min-width:340px; overflow:auto}
 
   .drops{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px}
   .drop{border:2px dashed #2b3f6b; border-radius:16px; padding:18px; text-align:center;
-        background:rgba(18,27,47,.6); backdrop-filter: blur(3px);}
+        background:rgba(18,27,47,.6); backdrop-filter: blur(3px)}
   .drop.drag{border-color:var(--accent); box-shadow:0 0 0 3px rgba(124,192,255,.2) inset}
   .btn{cursor:pointer; background:var(--accent); color:#041428; padding:9px 12px; border:none; border-radius:12px; font-weight:700}
   .btn.green{background:var(--accent2); color:#06210a}
@@ -44,6 +47,7 @@
   .row{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap}
   .muted{color:var(--muted)} .tiny{font-size:12px}
   .btnbar{display:flex; gap:8px; flex-wrap:wrap}
+  .amp{background:#0f1a33; border:1px solid #23325a; border-radius:12px; padding:10px; margin-top:8px}
 
   .viewer{background:var(--panel); color:var(--panelInk); border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:8px}
   .viewer h3{margin:0 0 4px 2px; font-size:16px}
@@ -56,13 +60,10 @@
   .controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap; border:1px solid #e3e7ef;
             background:#f9fbff; border-radius:10px; padding:6px 8px}
   .controls label{font-size:12px; color:#334}
-  .ctrlVal{min-width:42px; text-align:right; font-variant-numeric:tabular-nums}
+  .ctrlVal{min-width:48px; text-align:right; font-variant-numeric:tabular-nums}
   .sep{width:1px; background:#d9dfeb; height:20px}
 
-  .refPanel{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
-  .refPanel input{width:88px; padding:6px 8px; border:1px solid #ccd6ea; border-radius:8px}
-  .pill{background:#eef3ff; border:1px solid #d7e0f6; padding:6px 8px; border-radius:10px; font-size:12px; color:#445}
-
+  /* Right column (DAT + reference point & volumes) */
   .datCol{background:var(--dat-bg); color:var(--dat-ink); border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:10px; border:1px solid #232742}
   .datCard{background:var(--dat-card); border:1px solid #232742; border-radius:14px; padding:14px}
   .datTitle{margin:0 0 4px; font-size:16px}
@@ -83,16 +84,25 @@
   .datTable th{color:#c9d3ff; text-align:left}
   .rightStatus{margin-left:auto; color:#92f0c5}
   a.datLink{color:#9be0ff; text-decoration:none; border-bottom:1px dotted #9be0ff}
+
+  /* ref controls moved to right column */
+  .refPanel{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .refPanel input, .refPanel select{width:110px; padding:6px 8px; border:1px solid #ccd6ea; border-radius:8px}
+  .pill{background:#eef3ff; border:1px solid #d7e0f6; padding:6px 8px; border-radius:10px; font-size:12px; color:#445}
+
+  .volTableWrap{border:1px solid #dfe6f6; border-radius:10px; overflow:auto; max-height:260px; background:#fff}
+  .volTable{width:max(560px,100%); border-collapse:collapse}
+  .volTable th,.volTable td{padding:6px 8px; border-bottom:1px solid #e9eefb; color:#102}
 </style>
 </head>
 <body>
   <header>
     <h1>INP Surface Parser</h1>
-    <span class="sub">Assembly & Single-Part • Viewer • DAT→CSV • Deformed surfaces • Volumes</span>
+    <span class="sub">Assembly & Single-Part • Viewer • DAT→CSV • Deformed surfaces • Volumes • Amplitudes</span>
   </header>
 
   <div class="page">
-    <!-- Column 1: INP (assembly + single) -->
+    <!-- Column 1: INP (assembly + single) + Amplitudes -->
     <div class="col">
       <div class="drops">
         <div id="dropAsm" class="drop">
@@ -105,18 +115,22 @@
           <p style="margin:2px 0 6px"><b>Single-Part INP</b> (no <span class="mono">*Part</span> / <span class="mono">*End Part</span>)</p>
           <p><label class="btn" for="fileSingle">Choose file</label></p>
           <input id="fileSingle" type="file" accept=".inp,.txt" style="display:none" />
-          <p class="tiny muted">Parses global <span class="mono">*NODE</span>, <span class="mono">*ELEMENT</span>, <span class="mono">*Elset</span>, <span class="mono">*Surface</span>.</p>
+          <p class="tiny muted">Parses global <span class="mono">*NODE</span>, <span class="mono">*ELEMENT</span>, <span class="mono">*Elset</span>, <span class="mono">*Surface</span>, <span class="mono">*AMPLITUDE</span>.</p>
         </div>
       </div>
+
+      <!-- amplitudes appear here -->
+      <section id="ampOut"></section>
+
+      <!-- parts & surfaces -->
       <section id="out"></section>
     </div>
 
-    <!-- Column 2: viewer -->
+    <!-- Column 2: Viewer (wider) -->
     <div class="col viewer">
       <h3 id="vizTitle">Surface viewer</h3>
       <div class="tiny" id="vizMeta" style="margin:0 2px 4px;color:#465060"></div>
-
-      <!-- Deform controls (appear after Deform) -->
+      <!-- Deform controls stay with the viewer -->
       <div class="controls" id="deformControls" style="display:none">
         <label>Increment:
           <input id="incSlider" type="range" min="1" max="1" step="1" value="1" style="vertical-align:middle">
@@ -131,46 +145,18 @@
         <span id="timeLabel" class="tiny" style="color:#334"></span>
       </div>
 
-      <!-- Reference point & volume tools (show whenever a surface is selected) -->
-      <div class="controls" id="refControls" style="display:none">
-        <div class="refPanel">
-          <span class="pill">Ref point (x, y, z):</span>
-          <input id="refX" type="number" step="any" placeholder="x">
-          <input id="refY" type="number" step="any" placeholder="y">
-          <input id="refZ" type="number" step="any" placeholder="z">
-          <button id="setRef" class="btn">Set point</button>
-          <button id="togglePreview" class="btn softer" disabled>Check volume</button>
-          <button id="runSeries" class="btn green" disabled>Compute volume series</button>
-          <a id="volCsv" class="btn" style="display:none" download="volume_series.csv">Download CSV</a>
-        </div>
-      </div>
-
       <div class="canvasWrap" id="canvasWrap">
         <canvas id="viz"></canvas>
         <div class="hud">Drag: rotate • Wheel: zoom • Shift+Drag: pan • Dbl-click: reset</div>
       </div>
-
-      <div id="volTableWrap" class="controls" style="display:none">
-        <span class="pill">Volume table</span>
-        <div style="flex-basis:100%; overflow:auto; max-height:240px; border:1px solid #dfe6f6; border-radius:10px">
-          <table id="volTable" style="width:max(480px,100%); border-collapse:collapse">
-            <thead><tr>
-              <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #e9eefb">increment</th>
-              <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #e9eefb">time_increment</th>
-              <th style="text-align:left; padding:6px 8px; border-bottom:1px solid #e9eefb">volume</th>
-            </tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
     </div>
 
-    <!-- Column 3: DAT parser -->
+    <!-- Column 3: DAT parser + Reference point & Volume series -->
     <div class="col datCol">
       <div class="datCard">
         <h3 class="datTitle">Abaqus DAT → CSV (Increment Node Output)</h3>
-        <p class="datSmall">Drop a <code>.dat</code> or click to choose. Exports CSV and powers <b>Deform</b> & volume series:
-        <code>increment,time_increment,node,U1,U2,U3</code>.</p>
+        <p class="datSmall">Exports CSV and powers <b>Deform</b> & volume series:
+          <code>increment,time_increment,node,U1,U2,U3</code>. Times are accumulated to total time.</p>
         <div id="datDrop" class="datDrop" tabindex="0" role="button" aria-label="Drop DAT file here or click to choose">
           <span>📄 Drop <em>.dat</em> file here or click to choose</span>
           <input id="datFile" type="file" accept=".dat,text/plain" hidden />
@@ -189,7 +175,36 @@
         <div class="datLog" id="datLog" aria-live="polite"></div>
         <div class="datTableWrap" id="datTableWrap" style="display:none">
           <table id="datPreview" class="datTable">
-            <thead><tr><th>increment</th><th>time_increment</th><th>node</th><th>U1</th><th>U2</th><th>U3</th></tr></thead>
+            <thead><tr><th>increment</th><th>Δt</th><th>total_t</th><th>node</th><th>U1</th><th>U2</th><th>U3</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Reference point & volume are now here under DAT -->
+      <div class="datCard">
+        <h3 class="datTitle">Reference point • Volumes • P–V</h3>
+        <div class="refPanel">
+          <span class="pill">Ref point (x, y, z)</span>
+          <input id="refX" type="number" step="any" placeholder="x">
+          <input id="refY" type="number" step="any" placeholder="y">
+          <input id="refZ" type="number" step="any" placeholder="z">
+          <button id="setRef" class="datBtn">Set point</button>
+          <button id="togglePreview" class="datBtn" disabled>Check volume</button>
+        </div>
+        <div class="refPanel" style="margin-top:8px">
+          <span class="pill">Amplitude for P–V</span>
+          <select id="ampSelect">
+            <option value="">(none)</option>
+          </select>
+          <button id="runSeries" class="datBtn" disabled>Compute volume series</button>
+          <a id="volCsv" class="datBtn datLink" style="display:none" download="volume_series.csv">⬇ Download CSV</a>
+        </div>
+        <div id="volTableWrap" class="volTableWrap" style="display:none; margin-top:10px">
+          <table id="volTable" class="volTable">
+            <thead><tr>
+              <th>increment</th><th>Δt</th><th>total_t</th><th>volume</th><th>amplitude</th>
+            </tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -198,12 +213,32 @@
   </div>
 
 <script>
-/* ======================= INP parser + viewer ======================= */
-function cleanLines(text){ return text.replace(/\r/g,'').split('\n').filter(line=>!/^\s*\*\*/.test(line)); }
+/* ======================= INP parsing (nodes/elements/surfaces + amplitudes) ======================= */
+function cleanLines(text){ return text.replace(/\r/g,'').split('\n').filter(line=>!/^\s*\*\*\s*/.test(line)); }
 function parseCsvTokens(chunk){ return chunk.replace(/[^0-9,.\s\-+eE]/g,' ').split(/[, \t\n]+/).filter(t=>t.length>0); }
 function toInts(tokens){ return tokens.map(x=>parseInt(x,10)).filter(Number.isFinite); }
 function download(filename, text, mime='text/csv'){ const b=new Blob([text],{type:mime}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u); }
 const FACE_MAP={ 'S1':n=>[n[0],n[1],n[2]], 'S2':n=>[n[0],n[3],n[1]], 'S3':n=>[n[1],n[3],n[2]], 'S4':n=>[n[2],n[3],n[0]] };
+
+function parseAmplitudes(lines){
+  const amps=[]; for(let i=0;i<lines.length;i++){
+    const l=lines[i].trim();
+    if(/^\*amplitude\b/i.test(l)){
+      const name=/name\s*=\s*([^,\s]+)/i.exec(l)?.[1]||`Amplitude_${amps.length+1}`;
+      i++;
+      const pairs=[];
+      while(i<lines.length){
+        const s=lines[i].trim(); if(s.startsWith('*') || s==='') break;
+        const toks=parseCsvTokens(s).map(Number).filter(v=>Number.isFinite(v));
+        for(let k=0;k+1<toks.length;k+=2){ pairs.push([toks[k], toks[k+1]]); }
+        i++;
+      }
+      amps.push({name, pairs});
+      i--; // step back one because the for loop will increment
+    }
+  }
+  return amps;
+}
 
 function parseWithin(lines, iStart, iEnd){
   const data={nodes:new Map(), elements:new Map(), elsets:new Map(), surfaces:[]}; let i=iStart;
@@ -264,8 +299,13 @@ function buildCombined(part, surface){
   return {facesCsv, nodesCsv, facesCount: faceRows.length, nodeCount: nodeRows.length, tris: faceRows.map(r=>r.slice(3,6)), nodeSet: new Set(nodeRows.map(r=>r[2])) };
 }
 
+/* ======================= UI render: amplitudes + parts ======================= */
+const ampOut = document.getElementById('ampOut');
 const out = document.getElementById('out');
-setupDrop('Asm', f=>handleFile(f,true)); setupDrop('Single', f=>handleFile(f,false));
+let lastAmplitudes = []; // [{name, pairs:[[t,v],...]}]
+
+setupDrop('Asm', f=>handleFile(f,true));
+setupDrop('Single', f=>handleFile(f,false));
 function setupDrop(suffix,onFile){ const dz=document.getElementById('drop'+suffix), inp=document.getElementById('file'+suffix);
   ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault(); e.stopPropagation(); dz.classList.add('drag');}));
   ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault(); e.stopPropagation(); dz.classList.remove('drag');}));
@@ -276,11 +316,34 @@ function handleFile(file,isAssembly){
   const r=new FileReader();
   r.onload=()=>{
     const lines=cleanLines(String(r.result));
+    lastAmplitudes = parseAmplitudes(lines);
+    renderAmplitudes();
     let parts=isAssembly?parseAssembly(lines):parseSingle(lines);
     if(parts.length===0 && isAssembly){ parts=parseSingle(lines); }
     render(parts, file.name);
+    populateAmpSelect();
   };
   r.readAsText(file);
+}
+function renderAmplitudes(){
+  ampOut.innerHTML='';
+  if(!lastAmplitudes.length) return;
+  const card=document.createElement('div'); card.className='card';
+  card.innerHTML = `<h2>Amplitudes</h2><div class="kv tiny">Parsed ${lastAmplitudes.length} amplitude table(s).</div>`;
+  lastAmplitudes.forEach(a=>{
+    const rows=a.pairs.length;
+    const div=document.createElement('div'); div.className='amp';
+    div.innerHTML=`<div class="row">
+      <div><strong class="mono">${a.name}</strong><div class="tiny muted">${rows} rows (time,value)</div></div>
+      <div class="btnbar"><button class="btn">Download CSV</button></div>
+    </div>`;
+    div.querySelector('button').addEventListener('click', ()=>{
+      const csv='time,value\n'+a.pairs.map(p=>`${p[0]},${p[1]}`).join('\n');
+      download(`${a.name}.csv`, csv);
+    });
+    card.appendChild(div);
+  });
+  ampOut.appendChild(card);
 }
 function render(parts, filename){
   out.innerHTML='';
@@ -325,7 +388,7 @@ function render(parts, filename){
 }
 function safe(s){ return String(s).replace(/[^\w.-]+/g,'_'); }
 
-/* ---------- Viewer sizing & interaction ---------- */
+/* ======================= Viewer logic ======================= */
 const canvas = document.getElementById('viz');
 const wrap   = document.getElementById('canvasWrap');
 const vizTitle = document.getElementById('vizTitle');
@@ -337,7 +400,6 @@ const scaleSlider = document.getElementById('scaleSlider');
 const scaleLabel  = document.getElementById('scaleLabel');
 const timeLabel   = document.getElementById('timeLabel');
 
-const refControls = document.getElementById('refControls');
 const refX = document.getElementById('refX');
 const refY = document.getElementById('refY');
 const refZ = document.getElementById('refZ');
@@ -347,6 +409,7 @@ const runSeries = document.getElementById('runSeries');
 const volCsv = document.getElementById('volCsv');
 const volTableWrap = document.getElementById('volTableWrap');
 const volTableBody = document.querySelector('#volTable tbody');
+const ampSelect = document.getElementById('ampSelect');
 
 let ctx = canvas.getContext('2d');
 let CW=0,CH=0, resizeRAF=null;
@@ -369,8 +432,6 @@ function buildMeshForViz(part, faceTriples){
   const faces=faceTriples.map(t=>t.map(n=>id2i.get(n)));
   return {verts, faces, id2i};
 }
-
-/* render state */
 const state={
   rx:0.6, ry:-0.8, tx:0, ty:0, zoom:1.0, cx:0, cy:0, cz:0, scale:1,
   verts:[], faces:[], baseVerts:[],
@@ -412,7 +473,6 @@ function centerAndScale(verts){
   state.cx=cx; state.cy=cy; state.cz=cz;
   state.scale = 0.9 * Math.min(CW,CH) / size;
 }
-
 function showInViewer(mesh, partName, surfName,{showRef=false}={}){
   state.verts=mesh.verts; state.faces=mesh.faces;
   state.baseVerts = mesh.verts.map(v=>({x:v.x,y:v.y,z:v.z,id:v.id}));
@@ -421,12 +481,10 @@ function showInViewer(mesh, partName, surfName,{showRef=false}={}){
   centerAndScale(state.verts);
   vizTitle.textContent = `Surface viewer — ${surfName}`;
   vizMeta.textContent  = `Part: ${partName} • Verts: ${state.verts.length} • Tris: ${state.faces.length}`;
-  refControls.style.display='flex';
   draw();
 }
 function hideDeformControls(){ deformControls.style.display='none'; }
 
-/* draw 3D */
 function draw(){
   if(!ctx) return;
   ctx.clearRect(0,0,CW,CH);
@@ -498,7 +556,7 @@ function draw(){
   }
 }
 
-/* ======================= DAT parser (native) ======================= */
+/* ======================= DAT parser ======================= */
 const datDrop   = document.getElementById('datDrop');
 const datFile   = document.getElementById('datFile');
 const datParse  = document.getElementById('datParse');
@@ -514,8 +572,8 @@ const datPrev   = document.getElementById('datPreview');
 const datPrevT  = datPrev.querySelector('tbody');
 let datCurrentFile=null, datCsvUrl=null;
 
-/* in-memory displacement field */
-const datState = { order: [], timeByInc:new Map(), uByInc:new Map() }; // inc list; inc->time; inc->Map(node->[u1,u2,u3])
+/* displacement field & time */
+const datState = { order: [], dtimeByInc:new Map(), totalTimeByInc:new Map(), uByInc:new Map() };
 
 function datHumanSize(bytes){ if(bytes<1024) return bytes+' B'; const u=['KB','MB','GB']; let i=-1; do{bytes/=1024;i++;}while(bytes>=1024&&i<u.length-1); return bytes.toFixed(2)+' '+u[i]; }
 function datLogLine(s){ datLog.textContent += s + '\n'; datLog.scrollTop = datLog.scrollHeight; }
@@ -544,8 +602,6 @@ datFile.addEventListener('change', e=>{
   const f=e.target.files?.[0]; if(f) datAccept(f);
 });
 
-function datNormalize(str){ return {spaced: str.replace(/\s+/g,' ').trim(), nospace: str.replace(/\s+/g,'').trim()}; }
-
 function parseDatToCsv(text){
   const lines = text.split(/\r?\n/); const n=lines.length;
   const incHeader=/^\s*INCREMENT\s+(\d+)\s+SUMMARY/i;
@@ -556,30 +612,35 @@ function parseDatToCsv(text){
   const isStop=s=>/^\s*(MAXIMUM|MINIMUM|INCREMENT\s+\d+\s+SUMMARY|N\s*O\s*D\s*E\s+O\s*U\s*T\s*P\s*U\s*T)/i.test(s);
 
   let i=0, totalRows=0, incCount=0;
-  const out=['increment,time_increment,node,U1,U2,U3'];
-  datState.order.length=0; datState.timeByInc.clear(); datState.uByInc.clear();
+  const out=['increment,time_increment,total_time,node,U1,U2,U3'];
+  datState.order.length=0; datState.dtimeByInc=new Map(); datState.totalTimeByInc=new Map(); datState.uByInc.clear();
 
+  let totalTime=0;
   while(i<n){
     const mInc = lines[i]?.match(incHeader);
     if(!mInc){ i++; continue; }
     const incIndex = parseInt(mInc[1],10); incCount++; i++;
 
-    // find time increment
-    let timeInc = null, j=i;
+    // find Δt
+    let dt = null, j=i;
     for(; j<n; j++){
       const t=lines[j]; const mt=t.match(timeLine);
-      if(mt){ timeInc=parseFloat(mt[1]); break; }
+      if(mt){ dt=parseFloat(mt[1]); break; }
       if(incHeader.test(t)) break;
     }
     i=j;
+    if(dt==null) dt=0;
+    totalTime += dt;
+    datState.dtimeByInc.set(incIndex, dt);
+    datState.totalTimeByInc.set(incIndex, totalTime);
 
     // find NODE OUTPUT
     for(; i<n; i++){
-      const {nospace}=datNormalize(lines[i]);
-      if(nospace===nodeOutputMarker) break;
+      const ns=lines[i].replace(/\s+/g,'').trim();
+      if(ns==='NODEOUTPUT') break;
       if(incHeader.test(lines[i])) break;
     }
-    if(i>=n || datNormalize(lines[i]).nospace!==nodeOutputMarker) continue;
+    if(i>=n || lines[i].replace(/\s+/g,'').trim()!=='NODEOUTPUT') continue;
 
     // header → rows
     for(i++; i<n && !headerRow.test(lines[i]); i++){}
@@ -592,12 +653,11 @@ function parseDatToCsv(text){
       const m=s.match(numRow);
       if(!m) continue;
       const node=parseInt(m[1],10), U1=parseFloat(m[2]), U2=parseFloat(m[3]), U3=parseFloat(m[4]);
-      out.push(`${incIndex},${timeInc ?? ''},${node},${U1},${U2},${U3}`);
+      out.push(`${incIndex},${dt},${totalTime},${node},${U1},${U2},${U3}`);
       totalRows++;
       if(Number.isFinite(node)) map.set(node, [U1,U2,U3]);
     }
     datState.order.push(incIndex);
-    datState.timeByInc.set(incIndex, timeInc ?? null);
     datState.uByInc.set(incIndex, map);
   }
   return {csvText: out.join('\n'), totalRows, increments: incCount};
@@ -630,9 +690,9 @@ datParse.addEventListener('click', async ()=>{
   const rows = csvText.split('\n').slice(1, 201);
   for(const row of rows){
     if(!row.trim()) continue;
-    const [inc,time,node,U1,U2,U3]=row.split(',');
+    const [inc,dt,tt,node,U1,U2,U3]=row.split(',');
     const tr=document.createElement('tr');
-    for(const v of [inc,time,node,U1,U2,U3]){
+    for(const v of [inc,dt,tt,node,U1,U2,U3]){
       const td=document.createElement('td'); td.textContent=v; tr.appendChild(td);
     }
     datPrevT.appendChild(tr);
@@ -640,18 +700,17 @@ datParse.addEventListener('click', async ()=>{
   datTableWrap.style.display = rows.length ? 'block' : 'none';
 
   refreshDeformButtons();
+  enableVolumeButtonsIfReady();
 });
 
-/* Clear DAT */
 datClear.addEventListener('click', ()=>{
   datCurrentFile=null; datFile.value=''; datParse.disabled=true;
   if(datCsvUrl){ URL.revokeObjectURL(datCsvUrl); datCsvUrl=null; }
   datDL.style.display='none'; datTableWrap.style.display='none'; datPrevT.innerHTML='';
   datFname.style.display=datFsize.style.display=datStats.style.display='none';
   datLog.textContent=''; datSetStatus('');
-  datState.order.length=0; datState.timeByInc.clear(); datState.uByInc.clear();
-  refreshDeformButtons();
-  disableVolumeButtons();
+  datState.order.length=0; datState.uByInc.clear(); datState.dtimeByInc.clear?.(); datState.totalTimeByInc.clear?.();
+  refreshDeformButtons(); disableVolumeButtons();
 });
 
 /* enable/disable "Deform" based on DAT availability */
@@ -668,32 +727,29 @@ function startDeform(part, surface, tris, nodeSet){
   showInViewer(mesh, part.name, surface.name, {showRef:true});
 
   deformControls.style.display='flex';
-  incSlider.min = 1;
+  incSlider.min = Math.min(...datState.order);
   incSlider.max = Math.max(...datState.order);
   incSlider.value = datState.order[0];
-  incLabel.textContent = incSlider.value;
   scaleSlider.value = 1;
   scaleLabel.textContent = '1.00×';
   updateOverlayFromControls();
 
   enableVolumeButtonsIfReady();
 }
-
-incSlider.addEventListener('input', ()=>{
-  incLabel.textContent = incSlider.value;
-  updateOverlayFromControls();
-});
+incSlider.addEventListener('input', ()=>{ updateOverlayFromControls(); });
 scaleSlider.addEventListener('input', ()=>{
   scaleLabel.textContent = Number(scaleSlider.value).toFixed(2) + '×';
   updateOverlayFromControls();
 });
-
 function updateOverlayFromControls(){
   if(!currentContext) return;
   const inc = parseInt(incSlider.value,10);
-  const scale = parseFloat(scaleSlider.value);
-  timeLabel.textContent = 'Time increment: ' + (datState.timeByInc.get(inc) ?? '—');
+  incLabel.textContent = inc;
+  const dt = datState.dtimeByInc.get(inc) ?? '';
+  const tt = datState.totalTimeByInc.get(inc) ?? '';
+  timeLabel.textContent = `Δt=${dt} • t=${tt}`;
 
+  const scale = parseFloat(scaleSlider.value);
   const uMap = datState.uByInc.get(inc);
   if(!uMap){ state.overlayVerts=null; state.overlayFaces=null; draw(); return; }
 
@@ -723,39 +779,65 @@ togglePreview.addEventListener('click', ()=>{
   togglePreview.textContent = state.showPreview ? 'Hide preview' : 'Check volume';
   draw();
 });
+
+function volumeFrom(ref, tris, getPos){ // getPos(nodeId) -> [x,y,z]
+  let sum=0;
+  for(const t of tris){
+    const a=getPos(t[0]), b=getPos(t[1]), c=getPos(t[2]);
+    const ax=a[0]-ref.x, ay=a[1]-ref.y, az=a[2]-ref.z;
+    const bx=b[0]-ref.x, by=b[1]-ref.y, bz=b[2]-ref.z;
+    const cx=c[0]-ref.x, cy=c[1]-ref.y, cz=c[2]-ref.z;
+    const v = (ax*(by*cz - bz*cy) - ay*(bx*cz - bz*cx) + az*(bx*cy - by*cx)) / 6;
+    sum += Math.abs(v);
+  }
+  return sum;
+}
+
+function populateAmpSelect(){
+  const sel=ampSelect; const prev=sel.value;
+  sel.innerHTML='<option value="">(none)</option>';
+  lastAmplitudes.forEach((a,i)=>{
+    const opt=document.createElement('option');
+    opt.value=String(i); opt.textContent=a.name; sel.appendChild(opt);
+  });
+  if(lastAmplitudes.length) sel.value=prev || '';
+}
+
 runSeries.addEventListener('click', ()=>{
   if(!currentContext){ alert('Select a surface first.'); return; }
   if(!state.refPoint){ alert('Set a reference point first.'); return; }
   if(datState.order.length===0){ alert('Load and parse a DAT file first.'); return; }
-  const {part, tris} = currentContext;
-  // Build base nodal positions for fast lookup
-  const base = new Map();
-  for(const v of currentContext.mesh.verts){ base.set(v.id, [v.x,v.y,v.z]); }
 
-  // Helper: volume from triangulated surface + ref point
-  function volumeFrom(ref, getPos){ // getPos(nodeId) -> [x,y,z]
-    let sum=0;
-    for(const t of tris){
-      const a=getPos(t[0]), b=getPos(t[1]), c=getPos(t[2]);
-      const ax=a[0]-ref.x, ay=a[1]-ref.y, az=a[2]-ref.z;
-      const bx=b[0]-ref.x, by=b[1]-ref.y, bz=b[2]-ref.z;
-      const cx=c[0]-ref.x, cy=c[1]-ref.y, cz=c[2]-ref.z;
-      // signed volume of tetra (ref, a, b, c)
-      const vx = ay*(bz*cz - bz*cy) + az*(by*cx - bx*cy) + ax*(by*cz - bz*cy); // (not used)
-      // Use scalar triple product directly:
-      const v = (ax*(by*cz - bz*cy) - ay*(bx*cz - bz*cx) + az*(bx*cy - by*cx)) / 6;
-      sum += Math.abs(v);
-    }
-    return sum;
-  }
+  const {tris, mesh} = currentContext;
+  // base nodal positions
+  const base = new Map(); for(const v of mesh.verts){ base.set(v.id,[v.x,v.y,v.z]); }
 
-  // original (increment 0)
-  const v0 = volumeFrom(state.refPoint, id=>base.get(id));
+  // interpolate amp at total time (if any)
+  let amp=null;
+  const idx = ampSelect.value==='' ? -1 : parseInt(ampSelect.value,10);
+  if(idx>=0) amp = lastAmplitudes[idx];
 
-  const rows = [];
-  rows.push({inc:0, time:'', vol:v0});
+  const interp = amp ? (t=>{
+    const p=amp.pairs; if(!p.length) return '';
+    // clamp
+    if(t<=p[0][0]) return p[0][1];
+    if(t>=p[p.length-1][0]) return p[p.length-1][1];
+    // find bracket
+    let lo=0, hi=p.length-1;
+    // linear scan is fine for small tables; could binary search if big
+    for(let k=1;k<p.length;k++){ if(t<p[k][0]){ hi=k; lo=k-1; break; } }
+    const t0=p[lo][0], v0=p[lo][1], t1=p[hi][0], v1=p[hi][1];
+    const a=(t-t0)/(t1-t0);
+    return v0 + a*(v1-v0);
+  }) : null;
 
-  // each increment with true displacements (scale=1)
+  const rows=[]; const csv=['increment,dt,total_t,volume,amplitude'];
+
+  // increment 0 / original
+  const v0 = volumeFrom(state.refPoint, tris, id=>base.get(id));
+  rows.push({inc:0, dt:0, tt:0, vol:v0, amp: (interp?interp(0):'')});
+  csv.push(`0,0,0,${v0},${interp?interp(0):''}`);
+
   for(const inc of datState.order){
     const map = datState.uByInc.get(inc) || new Map();
     const getPos = id=>{
@@ -763,41 +845,35 @@ runSeries.addEventListener('click', ()=>{
       if(u) return [b[0]+u[0], b[1]+u[1], b[2]+u[2]];
       return b;
     };
-    const v = volumeFrom(state.refPoint, getPos);
-    rows.push({inc, time: datState.timeByInc.get(inc) ?? '', vol:v});
+    const vol = volumeFrom(state.refPoint, tris, getPos);
+    const dt = datState.dtimeByInc.get(inc) ?? '';
+    const tt = datState.totalTimeByInc.get(inc) ?? '';
+    const av = interp ? interp(tt) : '';
+    rows.push({inc, dt, tt, vol, amp: av});
+    csv.push(`${inc},${dt},${tt},${vol},${av}`);
   }
 
   // table + csv
   volTableBody.innerHTML='';
-  const csv = ['increment,time_increment,volume'];
   for(const r of rows){
     const tr=document.createElement('tr');
-    const td1=document.createElement('td'); td1.textContent=r.inc; td1.style.padding='6px 8px';
-    const td2=document.createElement('td'); td2.textContent=r.time; td2.style.padding='6px 8px';
-    const td3=document.createElement('td'); td3.textContent=r.vol; td3.style.padding='6px 8px';
-    tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+    [r.inc, r.dt, r.tt, r.vol, r.amp].forEach(v=>{
+      const td=document.createElement('td'); td.textContent=v; tr.appendChild(td);
+    });
     volTableBody.appendChild(tr);
-    csv.push(`${r.inc},${r.time},${r.vol}`);
   }
   volTableWrap.style.display='block';
-  const blob = new Blob([csv.join('\n')], {type:'text/csv;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  volCsv.href=url; volCsv.style.display='inline-block';
+  const blob=new Blob([csv.join('\n')], {type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob); volCsv.href=url; volCsv.style.display='inline-block';
 });
 
-/* small helpers */
 function enableVolumeButtonsIfReady(){
-  const ok = !!(currentContext && state.refPoint && datState.order.length>0);
+  const ok = !!currentContext; // surface selected
   runSeries.disabled = !ok;
 }
 function disableVolumeButtons(){
-  runSeries.disabled = true;
-  volCsv.style.display='none';
-  volTableWrap.style.display='none';
+  runSeries.disabled = true; volCsv.style.display='none'; volTableWrap.style.display='none';
 }
-
-function showInViewerWrapper(){/* kept for completeness */}
-/* ========= end script ========= */
 </script>
 </body>
 </html>
