@@ -4,88 +4,429 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gradient Paper Designer</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg-dark: #111827;
+            --bg-medium: #1f2937;
+            --bg-light: #374151;
+            --border-color: #4b5563;
+            --text-primary: #f9fafb;
+            --text-secondary: #9ca3af;
+            --accent-blue: #3b82f6;
+            --accent-blue-hover: #2563eb;
+            --accent-green: #22c55e;
+            --accent-green-hover: #16a34a;
+            --accent-purple: #8b5cf6;
+            --accent-purple-hover: #7c3aed;
+            --accent-red: #ef4444;
+            --accent-red-hover: #dc2626;
+        }
+
+        /* Basic Styles */
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 2rem;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        #app-container {
+            display: grid;
+            grid-template-columns: 280px 1fr 280px;
+            gap: 2rem;
+            width: 100%;
+            max-width: 1600px;
+        }
+
+        /* Panel Styles */
+        .panel {
+            background-color: var(--bg-medium);
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            max-height: calc(100vh - 4rem);
+        }
+
+        .panel-section {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .panel-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 0;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        #points-editor-panel-content, #points-list {
+            overflow-y: auto;
+        }
+
+        /* Form Controls */
+        label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+        }
+
+        select, input[type="file"] {
+            width: 100%;
+            background-color: var(--bg-light);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            color: var(--text-primary);
+            font-size: 1rem;
+        }
+
+        input[type="file"]::file-selector-button {
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            margin-right: 0.5rem;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        input[type="color"] {
+            width: 100%;
+            height: 40px;
+            border: none;
+            padding: 0;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            background-color: transparent;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch { border: 1px solid var(--border-color); border-radius: 0.25rem; }
+
+
+        button {
+            width: 100%;
+            border: none;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            text-align: center;
+        }
+
+        button:disabled {
+            background-color: var(--bg-light) !important;
+            color: var(--text-secondary);
+            cursor: not-allowed;
+        }
+
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+        .btn-blue { background-color: var(--accent-blue); color: white; }
+        .btn-blue:hover:not(:disabled) { background-color: var(--accent-blue-hover); }
+        .btn-green { background-color: var(--accent-green); color: white; }
+        .btn-green:hover:not(:disabled) { background-color: var(--accent-green-hover); }
+        .btn-purple { background-color: var(--accent-purple); color: white; }
+        .btn-purple:hover:not(:disabled) { background-color: var(--accent-purple-hover); }
+        .btn-red { background-color: var(--accent-red); color: white; }
+        .btn-red:hover:not(:disabled) { background-color: var(--accent-red-hover); }
+        .btn-gray { background-color: var(--bg-light); color: white; }
+        .btn-gray:hover:not(:disabled) { background-color: var(--border-color); }
+
+        /* Canvas */
+        #canvas-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        #canvas-svg {
+            border: 2px solid var(--border-color);
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+            background-color: #fff;
+            cursor: crosshair;
+        }
+        
+        #canvas-svg .point-handle {
+            cursor: move;
+            transition: r 0.1s ease-in-out;
+        }
+        #canvas-svg .point-handle:hover {
+            r: 8;
+        }
+        #canvas-svg .point-handle.selected {
+             stroke: var(--accent-blue);
+             stroke-width: 2px;
+        }
+
+        /* Points Panel */
+        .point-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+        .point-item:hover {
+            background-color: var(--bg-light);
+        }
+        .point-item.selected {
+            background-color: var(--bg-light);
+            border-color: var(--accent-blue);
+        }
+        .point-color-preview {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid white;
+        }
+
+        .point-item-label {
+            flex-grow: 1;
+        }
+        
+        #editor-placeholder {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+        }
+
+    </style>
 </head>
 <body>
-    <div id="root"></div>
 
-    <script type="text/babel">
-        const { useState, useRef, useEffect, useMemo } = React;
+    <div id="app-container">
+        <aside id="left-sidebar" class="panel">
+            <div class="panel-section">
+                <h2 class="panel-title">Settings</h2>
+                <div>
+                    <label for="paper-size">Paper Size</label>
+                    <select id="paper-size">
+                        <option value="letter">Letter (8.5" × 11")</option>
+                        <option value="a4">A4 (210mm × 297mm)</option>
+                        <option value="legal">Legal (8.5" × 14")</option>
+                        <option value="tabloid">Tabloid (11" × 17")</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="dpi">DPI (Dots Per Inch)</label>
+                    <select id="dpi">
+                        <option value="72">72 DPI</option>
+                        <option value="150">150 DPI</option>
+                        <option value="300">300 DPI</option>
+                        <option value="600">600 DPI</option>
+                    </select>
+                </div>
+                <p id="dimensions-info" style="color: var(--text-secondary); font-size: 0.875rem; margin-top: 1rem;"></p>
+            </div>
 
-        const GradientPaperDesigner = () => {
-            const [paperSize, setPaperSize] = useState('letter');
-            const [dpi, setDpi] = useState(150);
-            const [gradientPoints, setGradientPoints] = useState([]);
-            const [showColorPicker, setShowColorPicker] = useState(false);
-            const [showPointEditor, setShowPointEditor] = useState(false);
-            const [currentPoint, setCurrentPoint] = useState(null);
-            const [selectedColor, setSelectedColor] = useState('#ff0000');
-            const [selectedPointIndex, setSelectedPointIndex] = useState(null);
-            const [draggingIndex, setDraggingIndex] = useState(null);
-            const [needsRedraw, setNeedsRedraw] = useState(0);
-            const svgRef = useRef(null);
-            const canvasRef = useRef(null);
-            const rafRef = useRef(null);
+            <div class="panel-section">
+                <h2 class="panel-title">Edge Points</h2>
+                <div class="btn-grid">
+                    <button id="add-top" class="btn-blue">Top</button>
+                    <button id="add-bottom" class="btn-blue">Bottom</button>
+                    <button id="add-left" class="btn-blue">Left</button>
+                    <button id="add-right" class="btn-blue">Right</button>
+                </div>
+            </div>
 
-            const paperSizes = {
+            <div class="panel-section">
+                <h2 class="panel-title">Actions</h2>
+                 <div class="btn-grid">
+                    <button id="undo-btn" class="btn-gray">Undo</button>
+                    <button id="redo-btn" class="btn-gray">Redo</button>
+                </div>
+                <button id="download-png-btn" class="btn-green">⬇ Download PNG</button>
+                <button id="download-svg-btn" class="btn-purple">⬇ Download SVG</button>
+                <button id="clear-all-btn" class="btn-red">Clear All Points</button>
+            </div>
+            
+            <div class="panel-section">
+                 <h2 class="panel-title">Session</h2>
+                 <button id="save-json-btn" class="btn-gray">Save JSON</button>
+                 <div>
+                    <label for="load-json-input">Load JSON</label>
+                    <input type="file" id="load-json-input" accept=".json">
+                 </div>
+            </div>
+        </aside>
+
+        <main id="canvas-panel">
+             <div class="panel">
+                <h2 class="panel-title">Canvas</h2>
+                <p style="color: var(--text-secondary); font-size: 0.875rem; margin: -0.5rem 0 1rem 0;">Click to add points • Drag to move • Edit points on the right</p>
+                <div id="canvas-container">
+                    <svg id="canvas-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"></svg>
+                </div>
+            </div>
+        </main>
+
+        <aside id="right-sidebar" class="panel">
+            <div id="points-list-panel" class="panel-section" style="flex: 1; min-height: 200px;">
+                <h2 class="panel-title">Gradient Points (<span id="points-count">0</span>)</h2>
+                <div id="points-list"></div>
+            </div>
+            <div id="points-editor-panel" class="panel-section" style="flex: 2;">
+                <h2 class="panel-title">Edit Point</h2>
+                <div id="points-editor-panel-content">
+                     <div id="editor-placeholder">Select a point to edit its properties.</div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- STATE MANAGEMENT ---
+            let state = {
+                paperSize: 'letter',
+                dpi: 150,
+                gradientPoints: [],
+                selectedPointIndex: null,
+                draggingIndex: null,
+            };
+
+            let history = [];
+            let redoHistory = [];
+
+            // --- DOM ELEMENT REFERENCES ---
+            const dom = {
+                paperSizeSelect: document.getElementById('paper-size'),
+                dpiSelect: document.getElementById('dpi'),
+                dimensionsInfo: document.getElementById('dimensions-info'),
+                svg: document.getElementById('canvas-svg'),
+                pointsList: document.getElementById('points-list'),
+                pointsCount: document.getElementById('points-count'),
+                editorContent: document.getElementById('points-editor-panel-content'),
+                editorPlaceholder: document.getElementById('editor-placeholder'),
+                undoBtn: document.getElementById('undo-btn'),
+                redoBtn: document.getElementById('redo-btn'),
+                clearAllBtn: document.getElementById('clear-all-btn'),
+                downloadPngBtn: document.getElementById('download-png-btn'),
+                downloadSvgBtn: document.getElementById('download-svg-btn'),
+                saveJsonBtn: document.getElementById('save-json-btn'),
+                loadJsonInput: document.getElementById('load-json-input'),
+                edgeButtons: {
+                    top: document.getElementById('add-top'),
+                    bottom: document.getElementById('add-bottom'),
+                    left: document.getElementById('add-left'),
+                    right: document.getElementById('add-right'),
+                }
+            };
+
+            // --- CONSTANTS ---
+            const PAPER_SIZES = {
                 letter: { width: 8.5, height: 11, unit: 'in' },
                 a4: { width: 210, height: 297, unit: 'mm' },
                 legal: { width: 8.5, height: 14, unit: 'in' },
                 tabloid: { width: 11, height: 17, unit: 'in' }
             };
+            const PREVIEW_SCALE = 0.5; // Lower resolution for live preview for performance
+            let fullDimensions = { width: 0, height: 0 };
+            let displayDimensions = { width: 0, height: 0 };
 
-            const dpiOptions = [72, 150, 300, 600];
+            // --- CORE LOGIC ---
 
-            const convertToPixels = (size) => {
-                if (size.unit === 'in') {
-                    return {
-                        width: size.width * dpi,
-                        height: size.height * dpi
-                    };
-                } else {
-                    return {
-                        width: (size.width / 25.4) * dpi,
-                        height: (size.height / 25.4) * dpi
-                    };
+            /**
+             * The main render function, called whenever state changes.
+             */
+            function render() {
+                updateDimensions();
+                renderPointsList();
+                renderEditorPanel();
+                renderCanvas();
+                updateUIControlStates();
+            }
+            
+            /**
+             * Updates the state with new data and triggers a full re-render.
+             * @param {object} newState - The new state properties to merge.
+             * @param {boolean} recordHistory - Whether to save the state change in the undo history.
+             */
+            function setState(newState, recordHistory = false) {
+                if (recordHistory) {
+                    saveStateToHistory();
                 }
-            };
-
-            const dimensions = useMemo(() => convertToPixels(paperSizes[paperSize]), [paperSize, dpi]);
-            const scale = useMemo(() => Math.min(600 / dimensions.width, 700 / dimensions.height), [dimensions]);
-            const displayWidth = dimensions.width * scale;
-            const displayHeight = dimensions.height * scale;
-
-            // Use lower resolution for preview, full resolution for export
-            const previewScale = 0.5;
-            const previewWidth = Math.floor(dimensions.width * previewScale);
-            const previewHeight = Math.floor(dimensions.height * previewScale);
-
-            const generateGradient = (width, height, useFullResolution = false) => {
-                if (gradientPoints.length === 0) return null;
                 
-                const canvas = canvasRef.current || document.createElement('canvas');
+                const oldState = JSON.parse(JSON.stringify(state));
+                state = { ...state, ...newState };
+
+                // Deselect point if it was deleted
+                if (oldState.gradientPoints.length > state.gradientPoints.length && state.selectedPointIndex >= state.gradientPoints.length) {
+                    state.selectedPointIndex = null;
+                }
+                
+                render();
+            }
+
+            /**
+             * Converts paper size from inches/mm to pixels based on DPI.
+             */
+            function convertToPixels(size, dpi) {
+                if (size.unit === 'in') {
+                    return { width: size.width * dpi, height: size.height * dpi };
+                } else { // mm
+                    return { width: (size.width / 25.4) * dpi, height: (size.height / 25.4) * dpi };
+                }
+            }
+            
+            /**
+             * Recalculates canvas dimensions based on settings.
+             */
+            function updateDimensions() {
+                fullDimensions = convertToPixels(PAPER_SIZES[state.paperSize], state.dpi);
+                const scale = Math.min(600 / fullDimensions.width, 700 / fullDimensions.height);
+                displayDimensions = { width: fullDimensions.width * scale, height: fullDimensions.height * scale };
+
+                dom.dimensionsInfo.textContent = `Dimensions: ${fullDimensions.width.toFixed(0)} × ${fullDimensions.height.toFixed(0)} px`;
+                dom.svg.setAttribute('width', displayDimensions.width);
+                dom.svg.setAttribute('height', displayDimensions.height);
+                dom.svg.setAttribute('viewBox', `0 0 ${fullDimensions.width} ${fullDimensions.height}`);
+            }
+
+            /**
+             * Generates the gradient image data URL.
+             */
+            function generateGradient(width, height, points, scaleAdjust = 1) {
+                if (!points || points.length === 0) return null;
+                const canvas = document.createElement('canvas');
                 canvas.width = width;
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
-                
                 const imageData = ctx.createImageData(width, height);
                 const data = imageData.data;
-                
-                const scaleAdjust = useFullResolution ? 1 : previewScale;
-                
+
                 for (let y = 0; y < height; y++) {
                     for (let x = 0; x < width; x++) {
                         let totalWeight = 0;
                         let r = 0, g = 0, b = 0;
-                        
                         const actualX = x / scaleAdjust;
                         const actualY = y / scaleAdjust;
-                        
-                        for (let i = 0; i < gradientPoints.length; i++) {
-                            const point = gradientPoints[i];
+
+                        for (const point of points) {
                             const dx = actualX - point.x;
                             const dy = actualY - point.y;
                             const distance = Math.sqrt(dx * dx + dy * dy);
@@ -93,24 +434,17 @@
                             const radius = point.radius || 100;
                             const strength = point.strength || 1.0;
                             const falloff = point.falloff || 2.0;
-                            
+
                             const normalizedDist = distance / radius;
                             const weight = strength / Math.pow(normalizedDist + 0.1, falloff);
                             
                             totalWeight += weight;
-                            
-                            const color = point.color;
-                            const rgb = {
-                                r: parseInt(color.slice(1, 3), 16),
-                                g: parseInt(color.slice(3, 5), 16),
-                                b: parseInt(color.slice(5, 7), 16)
-                            };
-                            
-                            r += rgb.r * weight;
-                            g += rgb.g * weight;
-                            b += rgb.b * weight;
+                            const color = hexToRgb(point.color);
+                            r += color.r * weight;
+                            g += color.g * weight;
+                            b += color.b * weight;
                         }
-                        
+
                         const idx = (y * width + x) * 4;
                         data[idx] = r / totalWeight;
                         data[idx + 1] = g / totalWeight;
@@ -118,444 +452,407 @@
                         data[idx + 3] = 255;
                     }
                 }
-                
                 ctx.putImageData(imageData, 0, 0);
                 return canvas.toDataURL();
-            };
+            }
 
-            const gradientImage = useMemo(() => {
-                if (gradientPoints.length === 0) return null;
-                return generateGradient(previewWidth, previewHeight, false);
-            }, [gradientPoints, previewWidth, previewHeight, needsRedraw]);
+            // --- RENDER SUB-FUNCTIONS ---
 
-            useEffect(() => {
-                if (!canvasRef.current) {
-                    canvasRef.current = document.createElement('canvas');
+            function renderCanvas() {
+                dom.svg.innerHTML = ''; // Clear previous content
+
+                // Render gradient background
+                const previewWidth = Math.floor(fullDimensions.width * PREVIEW_SCALE);
+                const previewHeight = Math.floor(fullDimensions.height * PREVIEW_SCALE);
+                const gradientImage = generateGradient(previewWidth, previewHeight, state.gradientPoints, PREVIEW_SCALE);
+
+                if (gradientImage) {
+                    const image = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+                    image.setAttribute('href', gradientImage);
+                    image.setAttribute('width', fullDimensions.width);
+                    image.setAttribute('height', fullDimensions.height);
+                    image.setAttribute('preserveAspectRatio', 'none');
+                    dom.svg.appendChild(image);
                 }
-            }, []);
 
-            const handlePaperClick = (e) => {
-                if (draggingIndex !== null) return;
-                
-                const svg = svgRef.current;
-                const rect = svg.getBoundingClientRect();
-                const x = ((e.clientX - rect.left) / displayWidth) * dimensions.width;
-                const y = ((e.clientY - rect.top) / displayHeight) * dimensions.height;
-                
-                const clickedPointIndex = gradientPoints.findIndex(point => {
-                    const dx = x - point.x;
-                    const dy = y - point.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    return distance < 30;
+                // Render point handles
+                state.gradientPoints.forEach((point, idx) => {
+                    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    
+                    const outerCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    outerCircle.setAttribute('cx', point.x);
+                    outerCircle.setAttribute('cy', point.y);
+                    outerCircle.setAttribute('r', point.radius / 5);
+                    outerCircle.setAttribute('fill', point.color);
+                    outerCircle.setAttribute('fill-opacity', '0.2');
+                    
+                    const innerCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    innerCircle.setAttribute('cx', point.x);
+                    innerCircle.setAttribute('cy', point.y);
+                    innerCircle.setAttribute('r', 6);
+                    innerCircle.setAttribute('fill', point.color);
+                    innerCircle.setAttribute('stroke', 'white');
+                    innerCircle.setAttribute('stroke-width', '1.5');
+                    innerCircle.classList.add('point-handle');
+                    if (idx === state.selectedPointIndex) {
+                        innerCircle.classList.add('selected');
+                        innerCircle.setAttribute('r', 8);
+                    }
+
+                    innerCircle.addEventListener('mousedown', (e) => handlePointMouseDown(e, idx));
+
+                    group.appendChild(outerCircle);
+                    group.appendChild(innerCircle);
+                    dom.svg.appendChild(group);
                 });
+            }
 
-                if (clickedPointIndex !== -1) {
-                    setSelectedPointIndex(clickedPointIndex);
-                    setShowPointEditor(true);
-                } else {
-                    setCurrentPoint({ x, y });
-                    setShowColorPicker(true);
+            function renderPointsList() {
+                dom.pointsList.innerHTML = '';
+                dom.pointsCount.textContent = state.gradientPoints.length;
+
+                if (state.gradientPoints.length === 0) {
+                    dom.pointsList.innerHTML = `<p style="color: var(--text-secondary); font-size: 0.875rem; text-align: center;">No points added yet.</p>`;
+                    return;
                 }
-            };
 
-            const handleEdgeClick = (edge) => {
+                state.gradientPoints.forEach((point, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'point-item';
+                    if (index === state.selectedPointIndex) {
+                        item.classList.add('selected');
+                    }
+
+                    item.innerHTML = `
+                        <div class="point-color-preview" style="background-color: ${point.color};"></div>
+                        <span class="point-item-label">Point ${index + 1}</span>
+                    `;
+                    item.addEventListener('click', () => {
+                        setState({ selectedPointIndex: index });
+                    });
+                    dom.pointsList.appendChild(item);
+                });
+            }
+
+            function renderEditorPanel() {
+                const point = state.gradientPoints[state.selectedPointIndex];
+                if (point === undefined) {
+                    dom.editorContent.innerHTML = '';
+                    dom.editorContent.appendChild(dom.editorPlaceholder);
+                    dom.editorPlaceholder.style.display = 'block';
+                    return;
+                }
+                dom.editorPlaceholder.style.display = 'none';
+
+                dom.editorContent.innerHTML = `
+                    <div>
+                        <label for="color-picker">Color</label>
+                        <input type="color" id="color-picker" value="${point.color}">
+                    </div>
+                    <div>
+                        <label for="radius-slider">Radius: ${point.radius.toFixed(0)}</label>
+                        <input type="range" id="radius-slider" min="10" max="1000" value="${point.radius}">
+                    </div>
+                    <div>
+                        <label for="strength-slider">Strength: ${point.strength.toFixed(2)}</label>
+                        <input type="range" id="strength-slider" min="0.1" max="5" step="0.05" value="${point.strength}">
+                    </div>
+                    <div>
+                        <label for="falloff-slider">Falloff: ${point.falloff.toFixed(2)}</label>
+                        <input type="range" id="falloff-slider" min="0.5" max="8" step="0.1" value="${point.falloff}">
+                    </div>
+                    <div style="padding-top: 1rem; margin-top: 1rem; border-top: 1px solid var(--border-color);">
+                        <button id="delete-point-btn" class="btn-red">Delete Point</button>
+                    </div>
+                `;
+
+                // Add event listeners to new editor controls
+                document.getElementById('color-picker').addEventListener('input', (e) => updatePointProperty('color', e.target.value));
+                document.getElementById('radius-slider').addEventListener('input', (e) => updatePointProperty('radius', Number(e.target.value)));
+                document.getElementById('strength-slider').addEventListener('input', (e) => updatePointProperty('strength', Number(e.target.value)));
+                document.getElementById('falloff-slider').addEventListener('input', (e) => updatePointProperty('falloff', Number(e.target.value)));
+                document.getElementById('delete-point-btn').addEventListener('click', handleDeletePoint);
+
+                // For sliders, save history only on change (mouse up)
+                ['radius-slider', 'strength-slider', 'falloff-slider'].forEach(id => {
+                    document.getElementById(id).addEventListener('change', () => saveStateToHistory());
+                });
+                document.getElementById('color-picker').addEventListener('change', () => saveStateToHistory());
+            }
+            
+            function updateUIControlStates() {
+                const hasPoints = state.gradientPoints.length > 0;
+                dom.undoBtn.disabled = history.length === 0;
+                dom.redoBtn.disabled = redoHistory.length === 0;
+                dom.clearAllBtn.disabled = !hasPoints;
+                dom.downloadPngBtn.disabled = !hasPoints;
+                dom.downloadSvgBtn.disabled = !hasPoints;
+                dom.saveJsonBtn.disabled = !hasPoints;
+            }
+
+            // --- EVENT HANDLERS ---
+            
+            function handleSettingChange() {
+                setState({
+                    paperSize: dom.paperSizeSelect.value,
+                    dpi: Number(dom.dpiSelect.value)
+                });
+            }
+
+            function handleCanvasClick(e) {
+                if (state.draggingIndex !== null) return;
+                
+                const rect = dom.svg.getBoundingClientRect();
+                const x = (e.clientX - rect.left) / displayDimensions.width * fullDimensions.width;
+                const y = (e.clientY - rect.top) / displayDimensions.height * fullDimensions.height;
+
+                // Check if clicking on an existing point handle (handled by point mousedown)
+                if (e.target.classList.contains('point-handle')) return;
+
+                addPoint({ x, y });
+            }
+
+            function handlePointMouseDown(e, index) {
+                e.stopPropagation();
+                setState({ draggingIndex: index, selectedPointIndex: index });
+                window.addEventListener('mousemove', handleMouseMove);
+                window.addEventListener('mouseup', handleMouseUp);
+            }
+            
+            function handleMouseMove(e) {
+                if (state.draggingIndex === null) return;
+                
+                const rect = dom.svg.getBoundingClientRect();
+                const x = (e.clientX - rect.left) / displayDimensions.width * fullDimensions.width;
+                const y = (e.clientY - rect.top) / displayDimensions.height * fullDimensions.height;
+
+                const newPoints = [...state.gradientPoints];
+                newPoints[state.draggingIndex] = {
+                    ...newPoints[state.draggingIndex],
+                    x: Math.max(0, Math.min(fullDimensions.width, x)),
+                    y: Math.max(0, Math.min(fullDimensions.height, y))
+                };
+                // Use a temporary state update for performance during drag
+                state.gradientPoints = newPoints; 
+                renderCanvas(); // only re-render canvas for performance
+            }
+            
+            function handleMouseUp() {
+                if (state.draggingIndex !== null) {
+                    setState({ draggingIndex: null }, true); // Save state after drag ends
+                }
+                window.removeEventListener('mousemove', handleMouseMove);
+                window.removeEventListener('mouseup', handleMouseUp);
+            }
+            
+            function addPoint(coords) {
+                const newPoint = {
+                    ...coords,
+                    color: getRandomColor(),
+                    radius: 250,
+                    strength: 1.0,
+                    falloff: 2.0
+                };
+                const newPoints = [...state.gradientPoints, newPoint];
+                setState({ 
+                    gradientPoints: newPoints,
+                    selectedPointIndex: newPoints.length - 1
+                }, true);
+            }
+            
+            function handleEdgeClick(edge) {
                 let x, y;
                 switch(edge) {
-                    case 'top':
-                        x = dimensions.width / 2;
-                        y = 0;
-                        break;
-                    case 'bottom':
-                        x = dimensions.width / 2;
-                        y = dimensions.height;
-                        break;
-                    case 'left':
-                        x = 0;
-                        y = dimensions.height / 2;
-                        break;
-                    case 'right':
-                        x = dimensions.width;
-                        y = dimensions.height / 2;
-                        break;
+                    case 'top': x = fullDimensions.width / 2; y = 0; break;
+                    case 'bottom': x = fullDimensions.width / 2; y = fullDimensions.height; break;
+                    case 'left': x = 0; y = fullDimensions.height / 2; break;
+                    case 'right': x = fullDimensions.width; y = fullDimensions.height / 2; break;
                 }
-                setCurrentPoint({ x, y });
-                setShowColorPicker(true);
-            };
+                addPoint({ x, y });
+            }
 
-            const addGradientPoint = () => {
-                if (currentPoint) {
-                    setGradientPoints([...gradientPoints, { 
-                        ...currentPoint, 
-                        color: selectedColor,
-                        radius: 100,
-                        strength: 1.0,
-                        falloff: 2.0
-                    }]);
-                    setShowColorPicker(false);
-                    setCurrentPoint(null);
+            function updatePointProperty(property, value) {
+                if (state.selectedPointIndex === null) return;
+                const newPoints = [...state.gradientPoints];
+                newPoints[state.selectedPointIndex] = { ...newPoints[state.selectedPointIndex], [property]: value };
+                // Use temporary state for performance, history is saved on 'change' event
+                state.gradientPoints = newPoints;
+                render();
+            }
+
+            function handleDeletePoint() {
+                if (state.selectedPointIndex === null) return;
+                const newPoints = state.gradientPoints.filter((_, idx) => idx !== state.selectedPointIndex);
+                setState({ 
+                    gradientPoints: newPoints,
+                    selectedPointIndex: null
+                }, true);
+            }
+            
+            function handleClearAll() {
+                if (confirm('Are you sure you want to clear all points?')) {
+                    setState({ gradientPoints: [], selectedPointIndex: null }, true);
                 }
-            };
+            }
 
-            const updatePointProperty = (property, value) => {
-                if (selectedPointIndex !== null) {
-                    const updated = [...gradientPoints];
-                    updated[selectedPointIndex] = {
-                        ...updated[selectedPointIndex],
-                        [property]: value
-                    };
-                    setGradientPoints(updated);
-                }
-            };
-
-            const deletePoint = () => {
-                if (selectedPointIndex !== null) {
-                    const updated = gradientPoints.filter((_, idx) => idx !== selectedPointIndex);
-                    setGradientPoints(updated);
-                    setShowPointEditor(false);
-                    setSelectedPointIndex(null);
-                }
-            };
-
-            const handleMouseDown = (e, index) => {
-                e.stopPropagation();
-                setDraggingIndex(index);
-            };
-
-            const handleMouseMove = (e) => {
-                if (draggingIndex === null) return;
-                
-                if (rafRef.current) {
-                    cancelAnimationFrame(rafRef.current);
-                }
-                
-                rafRef.current = requestAnimationFrame(() => {
-                    const svg = svgRef.current;
-                    const rect = svg.getBoundingClientRect();
-                    const x = ((e.clientX - rect.left) / displayWidth) * dimensions.width;
-                    const y = ((e.clientY - rect.top) / displayHeight) * dimensions.height;
-                    
-                    const updated = [...gradientPoints];
-                    updated[draggingIndex] = {
-                        ...updated[draggingIndex],
-                        x: Math.max(0, Math.min(dimensions.width, x)),
-                        y: Math.max(0, Math.min(dimensions.height, y))
-                    };
-                    setGradientPoints(updated);
-                });
-            };
-
-            const handleMouseUp = () => {
-                setDraggingIndex(null);
-                setNeedsRedraw(prev => prev + 1);
-            };
-
-            useEffect(() => {
-                if (draggingIndex !== null) {
-                    window.addEventListener('mousemove', handleMouseMove);
-                    window.addEventListener('mouseup', handleMouseUp);
-                    return () => {
-                        window.removeEventListener('mousemove', handleMouseMove);
-                        window.removeEventListener('mouseup', handleMouseUp);
-                        if (rafRef.current) {
-                            cancelAnimationFrame(rafRef.current);
-                        }
-                    };
-                }
-            }, [draggingIndex]);
-
-            const downloadPNG = () => {
-                const dataUrl = generateGradient(dimensions.width, dimensions.height, true);
+            function handleDownload(type) {
+                const dataUrl = generateGradient(fullDimensions.width, fullDimensions.height, state.gradientPoints, 1);
                 const link = document.createElement('a');
-                link.download = `gradient-paper-${paperSize}-${dpi}dpi.png`;
-                link.href = dataUrl;
-                link.click();
-            };
+                
+                if (type === 'png') {
+                    link.download = `gradient-${state.paperSize}-${state.dpi}dpi.png`;
+                    link.href = dataUrl;
+                    link.click();
+                } else if (type === 'svg') {
+                    const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${fullDimensions.width}" height="${fullDimensions.height}">
+                        <image width="${fullDimensions.width}" height="${fullDimensions.height}" xlink:href="${dataUrl}"/>
+                    </svg>`;
+                    const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+                    const url = URL.createObjectURL(blob);
+                    link.download = `gradient-${state.paperSize}-${state.dpi}dpi.svg`;
+                    link.href = url;
+                    link.click();
+                    URL.revokeObjectURL(url);
+                }
+            }
 
-            const downloadSVG = () => {
-                const tempCanvas = document.createElement('canvas');
-                tempCanvas.width = dimensions.width;
-                tempCanvas.height = dimensions.height;
-                const dataUrl = generateGradient(dimensions.width, dimensions.height, true);
+            // --- HISTORY (UNDO/REDO) ---
+            function saveStateToHistory() {
+                history.push(JSON.parse(JSON.stringify(state)));
+                if (history.length > 50) history.shift(); // Limit history size
+                redoHistory = []; // Clear redo stack on new action
+                updateUIControlStates();
+            }
+
+            function undo() {
+                if (history.length === 0) return;
+                redoHistory.push(JSON.parse(JSON.stringify(state)));
+                const prevState = history.pop();
                 
-                const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${dimensions.width}" height="${dimensions.height}">
-                    <image width="${dimensions.width}" height="${dimensions.height}" xlink:href="${dataUrl}"/>
-                </svg>`;
+                // Directly update state without triggering another history save
+                state = prevState;
+                dom.paperSizeSelect.value = state.paperSize;
+                dom.dpiSelect.value = state.dpi;
+                render();
+            }
+            
+            function redo() {
+                if (redoHistory.length === 0) return;
+                history.push(JSON.parse(JSON.stringify(state)));
+                const nextState = redoHistory.pop();
                 
-                const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+                state = nextState;
+                dom.paperSizeSelect.value = state.paperSize;
+                dom.dpiSelect.value = state.dpi;
+                render();
+            }
+
+            function handleKeyDown(e) {
+                 if (e.ctrlKey || e.metaKey) {
+                    if (e.key === 'z' && !e.shiftKey) {
+                        e.preventDefault();
+                        undo();
+                    } else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
+                        e.preventDefault();
+                        redo();
+                    }
+                }
+            }
+
+            // --- SAVE/LOAD JSON ---
+            function handleSaveJson() {
+                const jsonString = JSON.stringify(state, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
-                link.download = `gradient-paper-${paperSize}-${dpi}dpi.svg`;
+                link.download = 'gradient-session.json';
                 link.href = url;
                 link.click();
                 URL.revokeObjectURL(url);
-            };
+            }
+            
+            function handleLoadJson(e) {
+                const file = e.target.files[0];
+                if (!file) return;
 
-            const selectedPoint = selectedPointIndex !== null ? gradientPoints[selectedPointIndex] : null;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const loadedState = JSON.parse(event.target.result);
+                        // Basic validation
+                        if (loadedState.paperSize && loadedState.dpi && Array.isArray(loadedState.gradientPoints)) {
+                            // Reset history before loading
+                            history = [];
+                            redoHistory = [];
+                            
+                            // Restore state and UI controls
+                            dom.paperSizeSelect.value = loadedState.paperSize;
+                            dom.dpiSelect.value = loadedState.dpi;
+                            setState(loadedState);
+                        } else {
+                            alert('Invalid JSON file format.');
+                        }
+                    } catch (err) {
+                        alert('Error parsing JSON file.');
+                        console.error(err);
+                    }
+                };
+                reader.readAsText(file);
+                e.target.value = ''; // Reset input to allow loading the same file again
+            }
 
-            return (
-                <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 text-white p-8">
-                    <div className="max-w-7xl mx-auto">
 
-                        
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                            <div className="lg:col-span-1 space-y-6">
-                                <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700">
-                                    <h2 className="text-xl font-semibold mb-4">Settings</h2>
-                                    
-                                    <div className="space-y-4">
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2">Paper Size</label>
-                                            <select 
-                                                value={paperSize}
-                                                onChange={(e) => setPaperSize(e.target.value)}
-                                                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            >
-                                                <option value="letter">Letter (8.5" × 11")</option>
-                                                <option value="a4">A4 (210mm × 297mm)</option>
-                                                <option value="legal">Legal (8.5" × 14")</option>
-                                                <option value="tabloid">Tabloid (11" × 17")</option>
-                                            </select>
-                                        </div>
-                                        
-                                        <div>
-                                            <label className="block text-sm font-medium mb-2">DPI</label>
-                                            <select 
-                                                value={dpi}
-                                                onChange={(e) => setDpi(Number(e.target.value))}
-                                                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            >
-                                                {dpiOptions.map(d => (
-                                                    <option key={d} value={d}>{d} DPI</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        
-                                        <div className="pt-4 border-t border-slate-700">
-                                            <p className="text-sm text-slate-400 mb-2">
-                                                Dimensions: {dimensions.width.toFixed(0)} × {dimensions.height.toFixed(0)} px
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
+            // --- UTILITY FUNCTIONS ---
+            function hexToRgb(hex) {
+                const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+                return result ? {
+                    r: parseInt(result[1], 16),
+                    g: parseInt(result[2], 16),
+                    b: parseInt(result[3], 16)
+                } : null;
+            }
 
-                                <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700">
-                                    <h2 className="text-xl font-semibold mb-4">Edge Points</h2>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <button onClick={() => handleEdgeClick('top')} className="bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-2 transition">Top</button>
-                                        <button onClick={() => handleEdgeClick('bottom')} className="bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-2 transition">Bottom</button>
-                                        <button onClick={() => handleEdgeClick('left')} className="bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-2 transition">Left</button>
-                                        <button onClick={() => handleEdgeClick('right')} className="bg-blue-600 hover:bg-blue-700 rounded-lg px-4 py-2 transition">Right</button>
-                                    </div>
-                                </div>
+            function getRandomColor() {
+                const letters = '0123456789ABCDEF';
+                let color = '#';
+                for (let i = 0; i < 6; i++) {
+                    color += letters[Math.floor(Math.random() * 16)];
+                }
+                return color;
+            }
+            
+            // --- INITIALIZATION ---
+            function init() {
+                // Attach event listeners
+                dom.paperSizeSelect.addEventListener('change', handleSettingChange);
+                dom.dpiSelect.addEventListener('change', handleSettingChange);
+                dom.svg.addEventListener('click', handleCanvasClick);
+                
+                Object.keys(dom.edgeButtons).forEach(edge => {
+                    dom.edgeButtons[edge].addEventListener('click', () => handleEdgeClick(edge));
+                });
+                
+                dom.clearAllBtn.addEventListener('click', handleClearAll);
+                dom.downloadPngBtn.addEventListener('click', () => handleDownload('png'));
+                dom.downloadSvgBtn.addEventListener('click', () => handleDownload('svg'));
 
-                                <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700">
-                                    <h2 className="text-xl font-semibold mb-4">Actions</h2>
-                                    <div className="space-y-2">
-                                        <button 
-                                            onClick={downloadPNG}
-                                            disabled={gradientPoints.length === 0}
-                                            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg px-4 py-3 transition flex items-center justify-center gap-2"
-                                        >
-                                            <span>⬇</span>
-                                            Download PNG
-                                        </button>
-                                        <button 
-                                            onClick={downloadSVG}
-                                            disabled={gradientPoints.length === 0}
-                                            className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg px-4 py-3 transition flex items-center justify-center gap-2"
-                                        >
-                                            <span>⬇</span>
-                                            Download SVG
-                                        </button>
-                                        <button 
-                                            onClick={() => setGradientPoints([])}
-                                            disabled={gradientPoints.length === 0}
-                                            className="w-full bg-red-600 hover:bg-red-700 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg px-4 py-3 transition"
-                                        >
-                                            Clear All Points
-                                        </button>
-                                    </div>
-                                    <p className="text-sm text-slate-400 mt-4">
-                                        {gradientPoints.length} gradient point{gradientPoints.length !== 1 ? 's' : ''} added
-                                    </p>
-                                </div>
-                            </div>
+                dom.undoBtn.addEventListener('click', undo);
+                dom.redoBtn.addEventListener('click', redo);
+                window.addEventListener('keydown', handleKeyDown);
 
-                            <div className="lg:col-span-2">
-                                <div className="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700">
-                                    <h2 className="text-xl font-semibold mb-4">Canvas</h2>
-                                    <p className="text-sm text-slate-400 mb-4">Click to add points • Click and drag to move • Click on a point to edit</p>
-                                    
-                                    <div className="flex justify-center">
-                                        <svg
-                                            ref={svgRef}
-                                            width={displayWidth}
-                                            height={displayHeight}
-                                            viewBox={`0 0 ${dimensions.width} ${dimensions.height}`}
-                                            className="border-2 border-slate-600 rounded-lg cursor-crosshair shadow-2xl bg-white"
-                                            onClick={handlePaperClick}
-                                        >
-                                            {gradientImage && (
-                                                <image 
-                                                    href={gradientImage} 
-                                                    width={dimensions.width} 
-                                                    height={dimensions.height}
-                                                    preserveAspectRatio="none"
-                                                />
-                                            )}
-                                            {gradientPoints.map((point, idx) => (
-                                                <g key={idx}>
-                                                    <circle
-                                                        cx={point.x}
-                                                        cy={point.y}
-                                                        r={(point.radius || 100) / 5}
-                                                        fill={point.color}
-                                                        fillOpacity="0.2"
-                                                        stroke="none"
-                                                    />
-                                                    <circle
-                                                        cx={point.x}
-                                                        cy={point.y}
-                                                        r={15 / scale}
-                                                        fill={point.color}
-                                                        stroke="white"
-                                                        strokeWidth={3 / scale}
-                                                        className="cursor-move"
-                                                        onMouseDown={(e) => handleMouseDown(e, idx)}
-                                                        style={{ cursor: 'move' }}
-                                                    />
-                                                </g>
-                                            ))}
-                                        </svg>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                dom.saveJsonBtn.addEventListener('click', handleSaveJson);
+                dom.loadJsonInput.addEventListener('change', handleLoadJson);
+                
+                // Set initial values
+                dom.paperSizeSelect.value = state.paperSize;
+                dom.dpiSelect.value = state.dpi;
 
-                    {showColorPicker && (
-                        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-                            <div className="bg-slate-800 rounded-xl p-8 border border-slate-700 shadow-2xl">
-                                <h3 className="text-2xl font-semibold mb-4">Choose Color</h3>
-                                <input
-                                    type="color"
-                                    value={selectedColor}
-                                    onChange={(e) => setSelectedColor(e.target.value)}
-                                    className="w-64 h-32 rounded-lg cursor-pointer"
-                                />
-                                <div className="flex gap-4 mt-6">
-                                    <button
-                                        onClick={addGradientPoint}
-                                        className="flex-1 bg-blue-600 hover:bg-blue-700 rounded-lg px-6 py-3 transition font-semibold"
-                                    >
-                                        Add Point
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setShowColorPicker(false);
-                                            setCurrentPoint(null);
-                                        }}
-                                        className="flex-1 bg-slate-700 hover:bg-slate-600 rounded-lg px-6 py-3 transition"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                // Initial render
+                render();
+            }
 
-                    {showPointEditor && selectedPoint && (
-                        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-                            <div className="bg-slate-800 rounded-xl p-8 border border-slate-700 shadow-2xl max-w-md w-full">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h3 className="text-2xl font-semibold flex items-center gap-2">
-                                        <span>⚙</span>
-                                        Edit Point
-                                    </h3>
-                                    <button
-                                        onClick={() => {
-                                            setShowPointEditor(false);
-                                            setSelectedPointIndex(null);
-                                            setNeedsRedraw(prev => prev + 1);
-                                        }}
-                                        className="text-slate-400 hover:text-white transition text-2xl"
-                                    >
-                                        ✕
-                                    </button>
-                                </div>
-
-                                <div className="space-y-6">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-2">Color</label>
-                                        <input
-                                            type="color"
-                                            value={selectedPoint.color}
-                                            onChange={(e) => updatePointProperty('color', e.target.value)}
-                                            className="w-full h-20 rounded-lg cursor-pointer"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium mb-2">
-                                            Radius: {selectedPoint.radius?.toFixed(0) || 100}
-                                        </label>
-                                        <input
-                                            type="range"
-                                            min="10"
-                                            max="500"
-                                            value={selectedPoint.radius || 100}
-                                            onChange={(e) => updatePointProperty('radius', Number(e.target.value))}
-                                            className="w-full"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium mb-2">
-                                            Strength: {selectedPoint.strength?.toFixed(2) || 1.0}
-                                        </label>
-                                        <input
-                                            type="range"
-                                            min="0.1"
-                                            max="3"
-                                            step="0.1"
-                                            value={selectedPoint.strength || 1.0}
-                                            onChange={(e) => updatePointProperty('strength', Number(e.target.value))}
-                                            className="w-full"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium mb-2">
-                                            Falloff: {selectedPoint.falloff?.toFixed(2) || 2.0}
-                                        </label>
-                                        <input
-                                            type="range"
-                                            min="0.5"
-                                            max="5"
-                                            step="0.1"
-                                            value={selectedPoint.falloff || 2.0}
-                                            onChange={(e) => updatePointProperty('falloff', Number(e.target.value))}
-                                            className="w-full"
-                                        />
-                                    </div>
-
-                                    <div className="pt-4 border-t border-slate-700">
-                                        <button
-                                            onClick={deletePoint}
-                                            className="w-full bg-red-600 hover:bg-red-700 rounded-lg px-6 py-3 transition font-semibold"
-                                        >
-                                            Delete Point
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        };
-
-        ReactDOM.render(<GradientPaperDesigner />, document.getElementById('root'));
+            init();
+        });
     </script>
 </body>
 </html>
