@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Image Measurement Tool</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
         }
         
         body {
@@ -18,14 +19,78 @@
             overflow: hidden;
             height: 100vh;
             display: flex;
+            flex-direction: column;
+        }
+        
+        .top-bar {
+            background: #252526;
+            padding: 10px;
+            display: flex;
+            gap: 8px;
+            border-bottom: 1px solid #3e3e42;
+            flex-wrap: wrap;
+            z-index: 100;
+        }
+        
+        .top-bar button {
+            padding: 10px 15px;
+            background: #0e639c;
+            border: none;
+            color: white;
+            cursor: pointer;
+            border-radius: 3px;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+        
+        .top-bar button:active {
+            background: #1177bb;
+        }
+        
+        .top-bar button.active {
+            background: #16825d;
+        }
+        
+        .top-bar button.danger {
+            background: #d32f2f;
+        }
+        
+        .menu-btn {
+            font-size: 20px;
         }
         
         .sidebar {
-            width: 300px;
+            position: fixed;
+            left: -100%;
+            top: 0;
+            width: 80%;
+            max-width: 300px;
+            height: 100vh;
             background: #252526;
             padding: 20px;
             overflow-y: auto;
-            border-right: 1px solid #3e3e42;
+            transition: left 0.3s;
+            z-index: 200;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+        }
+        
+        .sidebar.open {
+            left: 0;
+        }
+        
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            z-index: 150;
+        }
+        
+        .overlay.active {
+            display: block;
         }
         
         .main-canvas {
@@ -33,11 +98,22 @@
             position: relative;
             overflow: hidden;
             background: #1e1e1e;
+            touch-action: none;
         }
         
         canvas {
             position: absolute;
-            cursor: crosshair;
+            touch-action: none;
+        }
+        
+        video {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
         }
         
         .controls {
@@ -60,10 +136,9 @@
             cursor: pointer;
             border-radius: 3px;
             font-size: 14px;
-            flex: 1;
         }
         
-        button:hover {
+        button:active {
             background: #1177bb;
         }
         
@@ -90,10 +165,6 @@
             margin-bottom: 10px;
         }
         
-        .file-label:hover {
-            background: #1177bb;
-        }
-        
         .input-group {
             margin-bottom: 15px;
         }
@@ -107,34 +178,31 @@
         
         input[type="number"] {
             width: 100%;
-            padding: 8px;
+            padding: 10px;
             background: #3c3c3c;
             border: 1px solid #555;
             color: white;
             border-radius: 3px;
+            font-size: 14px;
         }
         
         .layer-list {
-            margin-top: 20px;
+            margin-top: 15px;
         }
         
         .layer-item {
             display: flex;
             align-items: center;
-            padding: 8px;
+            padding: 10px;
             background: #2d2d30;
             margin-bottom: 5px;
             border-radius: 3px;
             gap: 10px;
         }
         
-        .layer-item:hover {
-            background: #3e3e42;
-        }
-        
         .layer-item input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
+            width: 20px;
+            height: 20px;
             cursor: pointer;
         }
         
@@ -144,13 +212,9 @@
         }
         
         .layer-item .delete-btn {
-            padding: 5px 10px;
+            padding: 8px 12px;
             background: #d32f2f;
             font-size: 12px;
-        }
-        
-        .layer-item .delete-btn:hover {
-            background: #f44336;
         }
         
         h3 {
@@ -168,26 +232,84 @@
             margin-top: 10px;
         }
         
-        .mode-indicator {
-            background: #16825d;
-            padding: 5px 10px;
+        .distance-input-popup {
+            position: absolute;
+            background: #2d2d30;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            z-index: 1000;
+            display: none;
+            min-width: 200px;
+        }
+        
+        .distance-input-popup input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            background: #3c3c3c;
+            border: 1px solid #555;
+            color: white;
             border-radius: 3px;
-            font-size: 12px;
-            margin-bottom: 10px;
-            text-align: center;
+            font-size: 16px;
         }
         
-        .calibration-badge {
-            color: #4ec9b0;
+        .distance-input-popup .btn-group {
+            display: flex;
+            gap: 10px;
         }
         
-        .measure-badge {
-            color: #ce9178;
+        .distance-input-popup button {
+            flex: 1;
+        }
+        
+        .close-sidebar {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #d32f2f;
+            border: none;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 18px;
+        }
+        
+        @media (min-width: 768px) {
+            body {
+                flex-direction: row;
+            }
+            
+            .sidebar {
+                position: relative;
+                left: 0;
+                width: 300px;
+                max-width: none;
+                box-shadow: none;
+            }
+            
+            .overlay {
+                display: none !important;
+            }
+            
+            .close-sidebar {
+                display: none;
+            }
+            
+            .menu-btn {
+                display: none;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="sidebar">
+    <div class="overlay" id="overlay"></div>
+    
+    <div class="sidebar" id="sidebar">
+        <button class="close-sidebar" id="closeSidebar">✕</button>
+        
         <div class="controls">
             <h3>Image Source</h3>
             <label class="file-label" for="fileInput">
@@ -202,22 +324,18 @@
         
         <div class="controls">
             <h3>Tools</h3>
-            <div id="modeIndicator" class="mode-indicator">Select a tool to begin</div>
             
             <button id="calibrateBtn">📏 Calibrate</button>
-            <div class="input-group" id="calibrationInput" style="display:none;">
-                <label>Known Distance (units):</label>
-                <input type="number" id="knownDistance" step="0.01" placeholder="e.g., 100">
-            </div>
-            
             <button id="measureBtn">📐 Measure</button>
             
-            <div class="btn-group" style="margin-top: 10px;">
-                <button id="undoBtn">↶ Undo</button>
-                <button id="redoBtn">↷ Redo</button>
+            <div class="info" style="margin-top: 10px;">
+                <strong>Instructions:</strong><br>
+                • Tap twice to place points<br>
+                • Drag points to adjust<br>
+                • Tap line to edit distance<br>
+                • Pinch to zoom<br>
+                • Drag to pan
             </div>
-            
-            <button id="clearBtn" style="background: #d32f2f; margin-top: 10px;">🗑️ Clear All</button>
         </div>
         
         <div class="controls">
@@ -226,20 +344,37 @@
         </div>
         
         <div class="controls">
-            <h3>Export</h3>
-            <button id="exportBtn">💾 Save Image</button>
-            <div class="info">
-                <strong>Controls:</strong><br>
-                • Mouse wheel: Zoom<br>
-                • Click + Drag: Pan<br>
-                • ESC: Cancel drawing
+            <div class="btn-group">
+                <button id="undoBtn">↶</button>
+                <button id="redoBtn">↷</button>
+                <button id="clearBtn" style="background: #d32f2f;">🗑️</button>
+                <button id="exportBtn">💾</button>
             </div>
         </div>
     </div>
     
-    <div class="main-canvas">
-        <canvas id="canvas"></canvas>
-        <video id="video" style="display:none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain;" autoplay></video>
+    <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+        <div class="top-bar">
+            <button class="menu-btn" id="menuBtn">☰</button>
+            <button id="calibrateBtnTop">📏 Calibrate</button>
+            <button id="measureBtnTop">📐 Measure</button>
+            <button id="undoBtnTop">↶</button>
+            <button id="redoBtnTop">↷</button>
+        </div>
+        
+        <div class="main-canvas" id="mainCanvas">
+            <canvas id="canvas"></canvas>
+            <video id="video" autoplay playsinline></video>
+        </div>
+    </div>
+    
+    <div class="distance-input-popup" id="distancePopup">
+        <label id="popupLabel">Enter Distance:</label>
+        <input type="number" id="popupInput" step="0.01" placeholder="e.g., 100">
+        <div class="btn-group">
+            <button id="popupCancel">Cancel</button>
+            <button id="popupOk" style="background: #16825d;">OK</button>
+        </div>
     </div>
 
     <script>
@@ -253,16 +388,32 @@
             scale: 1,
             offsetX: 0,
             offsetY: 0,
-            mode: null, // 'calibrate' or 'measure'
-            drawing: false,
-            startPoint: null,
+            mode: null,
+            clickCount: 0,
+            tempPoints: [],
             calibrationFactor: null,
             layers: [],
             history: [],
             historyIndex: -1,
             isDragging: false,
-            lastMousePos: null
+            draggedPoint: null,
+            lastTouchPos: null,
+            lastTouchDist: null
         };
+        
+        // Mobile menu
+        document.getElementById('menuBtn').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.add('open');
+            document.getElementById('overlay').classList.add('active');
+        });
+        
+        document.getElementById('closeSidebar').addEventListener('click', closeSidebar);
+        document.getElementById('overlay').addEventListener('click', closeSidebar);
+        
+        function closeSidebar() {
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('overlay').classList.remove('active');
+        }
         
         // Initialize canvas size
         function resizeCanvas() {
@@ -344,155 +495,219 @@
         }
         
         // Mode selection
-        document.getElementById('calibrateBtn').addEventListener('click', () => {
-            state.mode = 'calibrate';
-            updateModeIndicator();
-            document.getElementById('calibrationInput').style.display = 'block';
-        });
+        function setMode(mode) {
+            state.mode = mode;
+            state.clickCount = 0;
+            state.tempPoints = [];
+            updateModeButtons();
+            closeSidebar();
+        }
         
+        document.getElementById('calibrateBtn').addEventListener('click', () => setMode('calibrate'));
         document.getElementById('measureBtn').addEventListener('click', () => {
             if (!state.calibrationFactor) {
-                alert('Please calibrate first by drawing a line with known distance');
+                alert('Please calibrate first');
                 return;
             }
-            state.mode = 'measure';
-            updateModeIndicator();
-            document.getElementById('calibrationInput').style.display = 'none';
+            setMode('measure');
         });
         
-        function updateModeIndicator() {
-            const indicator = document.getElementById('modeIndicator');
+        document.getElementById('calibrateBtnTop').addEventListener('click', () => setMode('calibrate'));
+        document.getElementById('measureBtnTop').addEventListener('click', () => {
+            if (!state.calibrationFactor) {
+                alert('Please calibrate first');
+                return;
+            }
+            setMode('measure');
+        });
+        
+        function updateModeButtons() {
+            const btns = [
+                document.getElementById('calibrateBtn'),
+                document.getElementById('calibrateBtnTop'),
+                document.getElementById('measureBtn'),
+                document.getElementById('measureBtnTop')
+            ];
+            
+            btns.forEach(btn => btn.classList.remove('active'));
+            
             if (state.mode === 'calibrate') {
-                indicator.textContent = '📏 Calibration Mode';
-                indicator.style.background = '#16825d';
                 document.getElementById('calibrateBtn').classList.add('active');
-                document.getElementById('measureBtn').classList.remove('active');
+                document.getElementById('calibrateBtnTop').classList.add('active');
             } else if (state.mode === 'measure') {
-                indicator.textContent = '📐 Measurement Mode';
-                indicator.style.background = '#b5651d';
-                document.getElementById('calibrateBtn').classList.remove('active');
                 document.getElementById('measureBtn').classList.add('active');
-            } else {
-                indicator.textContent = 'Select a tool to begin';
-                indicator.style.background = '#2d2d30';
-                document.getElementById('calibrateBtn').classList.remove('active');
-                document.getElementById('measureBtn').classList.remove('active');
+                document.getElementById('measureBtnTop').classList.add('active');
             }
         }
         
-        // Mouse events
-        canvas.addEventListener('mousedown', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            
-            if (state.mode === 'calibrate' || state.mode === 'measure') {
-                state.drawing = true;
-                state.startPoint = screenToImage(x, y);
-            } else {
-                state.isDragging = true;
-                state.lastMousePos = { x, y };
-                canvas.style.cursor = 'grab';
-            }
-        });
+        // Touch/Mouse events
+        let touchStartTime = 0;
         
-        canvas.addEventListener('mousemove', (e) => {
+        function getEventPos(e) {
             const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            
-            if (state.drawing && state.startPoint) {
-                render();
-                const currentPoint = screenToImage(x, y);
-                const startScreen = imageToScreen(state.startPoint.x, state.startPoint.y);
-                const endScreen = imageToScreen(currentPoint.x, currentPoint.y);
-                
-                ctx.strokeStyle = state.mode === 'calibrate' ? '#4ec9b0' : '#ce9178';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([5, 5]);
-                ctx.beginPath();
-                ctx.moveTo(startScreen.x, startScreen.y);
-                ctx.lineTo(endScreen.x, endScreen.y);
-                ctx.stroke();
-                ctx.setLineDash([]);
-                
-                drawPoint(startScreen.x, startScreen.y, state.mode === 'calibrate' ? '#4ec9b0' : '#ce9178');
-                drawPoint(endScreen.x, endScreen.y, state.mode === 'calibrate' ? '#4ec9b0' : '#ce9178');
-            } else if (state.isDragging && state.lastMousePos) {
-                const dx = x - state.lastMousePos.x;
-                const dy = y - state.lastMousePos.y;
-                state.offsetX += dx;
-                state.offsetY += dy;
-                state.lastMousePos = { x, y };
-                render();
+            if (e.touches && e.touches.length > 0) {
+                return {
+                    x: e.touches[0].clientX - rect.left,
+                    y: e.touches[0].clientY - rect.top
+                };
             }
-        });
+            return {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        }
         
-        canvas.addEventListener('mouseup', (e) => {
-            if (state.drawing && state.startPoint) {
+        function getTouchDistance(e) {
+            if (e.touches.length < 2) return null;
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+        
+        function handleStart(e) {
+            touchStartTime = Date.now();
+            
+            if (e.touches && e.touches.length === 2) {
+                state.lastTouchDist = getTouchDistance(e);
                 const rect = canvas.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                const endPoint = screenToImage(x, y);
+                state.lastTouchPos = {
+                    x: (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left,
+                    y: (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top
+                };
+                return;
+            }
+            
+            const pos = getEventPos(e);
+            const imagePos = screenToImage(pos.x, pos.y);
+            
+            // Check if clicking on existing point
+            const pointRadius = 15 / state.scale;
+            for (let layer of state.layers) {
+                if (!layer.visible) continue;
                 
-                if (state.mode === 'calibrate') {
-                    const distance = parseFloat(document.getElementById('knownDistance').value);
-                    if (!distance || distance <= 0) {
-                        alert('Please enter a valid known distance');
-                        state.drawing = false;
-                        state.startPoint = null;
-                        render();
-                        return;
-                    }
-                    
-                    const pixelDistance = Math.sqrt(
-                        Math.pow(endPoint.x - state.startPoint.x, 2) +
-                        Math.pow(endPoint.y - state.startPoint.y, 2)
-                    );
-                    
-                    state.calibrationFactor = distance / pixelDistance;
-                    
-                    addLayer({
-                        type: 'calibrate',
-                        start: state.startPoint,
-                        end: endPoint,
-                        distance: distance,
-                        visible: true
-                    });
-                    
-                    saveHistory();
-                } else if (state.mode === 'measure') {
-                    const pixelDistance = Math.sqrt(
-                        Math.pow(endPoint.x - state.startPoint.x, 2) +
-                        Math.pow(endPoint.y - state.startPoint.y, 2)
-                    );
-                    
-                    const realDistance = pixelDistance * state.calibrationFactor;
-                    
-                    addLayer({
-                        type: 'measure',
-                        start: state.startPoint,
-                        end: endPoint,
-                        distance: realDistance,
-                        visible: true
-                    });
-                    
-                    saveHistory();
+                if (distance(imagePos, layer.start) < pointRadius) {
+                    state.draggedPoint = { layer, point: 'start' };
+                    return;
+                }
+                if (distance(imagePos, layer.end) < pointRadius) {
+                    state.draggedPoint = { layer, point: 'end' };
+                    return;
                 }
                 
-                state.drawing = false;
-                state.startPoint = null;
+                // Check if clicking on line to edit distance
+                if (isPointNearLine(imagePos, layer.start, layer.end, 20 / state.scale)) {
+                    showDistancePopup(layer, pos.x, pos.y);
+                    return;
+                }
+            }
+            
+            state.isDragging = true;
+            state.lastTouchPos = pos;
+        }
+        
+        function handleMove(e) {
+            e.preventDefault();
+            
+            if (e.touches && e.touches.length === 2) {
+                // Pinch zoom
+                const dist = getTouchDistance(e);
+                if (state.lastTouchDist) {
+                    const rect = canvas.getBoundingClientRect();
+                    const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+                    const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
+                    
+                    const oldScale = state.scale;
+                    const scaleFactor = dist / state.lastTouchDist;
+                    state.scale *= scaleFactor;
+                    state.scale = Math.max(0.1, Math.min(10, state.scale));
+                    
+                    state.offsetX = centerX - (centerX - state.offsetX) * (state.scale / oldScale);
+                    state.offsetY = centerY - (centerY - state.offsetY) * (state.scale / oldScale);
+                }
+                state.lastTouchDist = dist;
+                
+                const newCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - canvas.getBoundingClientRect().left;
+                const newCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - canvas.getBoundingClientRect().top;
+                
+                if (state.lastTouchPos) {
+                    state.offsetX += newCenterX - state.lastTouchPos.x;
+                    state.offsetY += newCenterY - state.lastTouchPos.y;
+                }
+                
+                state.lastTouchPos = { x: newCenterX, y: newCenterY };
                 render();
+                return;
+            }
+            
+            const pos = getEventPos(e);
+            
+            if (state.draggedPoint) {
+                const imagePos = screenToImage(pos.x, pos.y);
+                state.draggedPoint.layer[state.draggedPoint.point] = imagePos;
+                
+                // Recalculate distance
+                const layer = state.draggedPoint.layer;
+                const pixelDist = distance(layer.start, layer.end);
+                if (layer.type === 'calibrate') {
+                    state.calibrationFactor = layer.originalDistance / pixelDist;
+                } else {
+                    layer.distance = pixelDist * state.calibrationFactor;
+                }
+                
+                render();
+            } else if (state.isDragging && state.lastTouchPos) {
+                const dx = pos.x - state.lastTouchPos.x;
+                const dy = pos.y - state.lastTouchPos.y;
+                state.offsetX += dx;
+                state.offsetY += dy;
+                state.lastTouchPos = pos;
+                render();
+            }
+        }
+        
+        function handleEnd(e) {
+            const touchDuration = Date.now() - touchStartTime;
+            
+            if (state.draggedPoint) {
+                state.draggedPoint = null;
+                saveHistory();
+                return;
             }
             
             if (state.isDragging) {
                 state.isDragging = false;
-                state.lastMousePos = null;
-                canvas.style.cursor = 'crosshair';
+                state.lastTouchPos = null;
+                state.lastTouchDist = null;
+                return;
             }
-        });
+            
+            // Only register click if it was quick (not a drag)
+            if (touchDuration > 300) return;
+            
+            if (!state.mode || !state.image) return;
+            
+            const pos = getEventPos(e.changedTouches ? e.changedTouches[0] : e);
+            const imagePos = screenToImage(pos.x, pos.y);
+            
+            state.tempPoints.push(imagePos);
+            state.clickCount++;
+            
+            if (state.clickCount === 2) {
+                showDistancePopupForNew(pos.x, pos.y);
+            }
+            
+            render();
+        }
         
-        // Zoom with mouse wheel
+        canvas.addEventListener('mousedown', handleStart);
+        canvas.addEventListener('mousemove', handleMove);
+        canvas.addEventListener('mouseup', handleEnd);
+        
+        canvas.addEventListener('touchstart', handleStart, { passive: false });
+        canvas.addEventListener('touchmove', handleMove, { passive: false });
+        canvas.addEventListener('touchend', handleEnd, { passive: false });
+        
+        // Wheel zoom for desktop
         canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
             const rect = canvas.getBoundingClientRect();
@@ -504,20 +719,107 @@
             state.scale *= zoomFactor;
             state.scale = Math.max(0.1, Math.min(10, state.scale));
             
-            // Adjust offset to zoom towards mouse position
             state.offsetX = mouseX - (mouseX - state.offsetX) * (state.scale / oldScale);
             state.offsetY = mouseY - (mouseY - state.offsetY) * (state.scale / oldScale);
             
             render();
         });
         
-        // Cancel drawing with ESC
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && state.drawing) {
-                state.drawing = false;
-                state.startPoint = null;
-                render();
+        // Distance popup
+        let currentEditLayer = null;
+        
+        function showDistancePopup(layer, x, y) {
+            currentEditLayer = layer;
+            const popup = document.getElementById('distancePopup');
+            const input = document.getElementById('popupInput');
+            
+            document.getElementById('popupLabel').textContent = 
+                layer.type === 'calibrate' ? 'Known Distance:' : 'Measured Distance:';
+            
+            input.value = layer.type === 'calibrate' ? layer.originalDistance : layer.distance.toFixed(2);
+            
+            popup.style.display = 'block';
+            popup.style.left = Math.min(x, canvas.width - 220) + 'px';
+            popup.style.top = Math.min(y, canvas.height - 120) + 'px';
+            
+            input.focus();
+            input.select();
+        }
+        
+        function showDistancePopupForNew(x, y) {
+            const popup = document.getElementById('distancePopup');
+            const input = document.getElementById('popupInput');
+            
+            document.getElementById('popupLabel').textContent = 
+                state.mode === 'calibrate' ? 'Known Distance:' : 'Enter Distance:';
+            
+            input.value = '';
+            
+            popup.style.display = 'block';
+            popup.style.left = Math.min(x, canvas.width - 220) + 'px';
+            popup.style.top = Math.min(y, canvas.height - 120) + 'px';
+            
+            input.focus();
+        }
+        
+        document.getElementById('popupOk').addEventListener('click', () => {
+            const value = parseFloat(document.getElementById('popupInput').value);
+            
+            if (!value || value <= 0) {
+                alert('Please enter a valid distance');
+                return;
             }
+            
+            if (currentEditLayer) {
+                // Editing existing layer
+                if (currentEditLayer.type === 'calibrate') {
+                    currentEditLayer.originalDistance = value;
+                    const pixelDist = distance(currentEditLayer.start, currentEditLayer.end);
+                    state.calibrationFactor = value / pixelDist;
+                } else {
+                    currentEditLayer.distance = value;
+                }
+                currentEditLayer = null;
+                saveHistory();
+            } else {
+                // Creating new layer
+                const pixelDist = distance(state.tempPoints[0], state.tempPoints[1]);
+                
+                if (state.mode === 'calibrate') {
+                    state.calibrationFactor = value / pixelDist;
+                    addLayer({
+                        type: 'calibrate',
+                        start: state.tempPoints[0],
+                        end: state.tempPoints[1],
+                        distance: value,
+                        originalDistance: value,
+                        visible: true
+                    });
+                } else {
+                    addLayer({
+                        type: 'measure',
+                        start: state.tempPoints[0],
+                        end: state.tempPoints[1],
+                        distance: value,
+                        visible: true
+                    });
+                }
+                
+                saveHistory();
+            }
+            
+            state.clickCount = 0;
+            state.tempPoints = [];
+            document.getElementById('distancePopup').style.display = 'none';
+            render();
+        });
+        
+        document.getElementById('popupCancel').addEventListener('click', () => {
+            currentEditLayer = null;
+            state.clickCount = 0;
+            state.tempPoints = [];
+            document.getElementById('distancePopup').style.display = 'none';
+            render();
         });
         
         // Layer management
@@ -545,9 +847,9 @@
                 
                 const label = document.createElement('span');
                 if (layer.type === 'calibrate') {
-                    label.innerHTML = `<span class="calibration-badge">📏</span> Calibration: ${layer.distance.toFixed(2)}`;
+                    label.textContent = `📏 Cal: ${(layer.originalDistance || layer.distance).toFixed(2)}`;
                 } else {
-                    label.innerHTML = `<span class="measure-badge">📐</span> Measure: ${layer.distance.toFixed(2)}`;
+                    label.textContent = `📐 ${layer.distance.toFixed(2)}`;
                 }
                 
                 const deleteBtn = document.createElement('button');
@@ -567,7 +869,27 @@
             });
         }
         
-        // Coordinate transformation
+        // Utilities
+        function distance(p1, p2) {
+            return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+        }
+        
+        function isPointNearLine(point, start, end, threshold) {
+            const lineLen = distance(start, end);
+            if (lineLen === 0) return false;
+            
+            const t = Math.max(0, Math.min(1, 
+                ((point.x - start.x) * (end.x - start.x) + (point.y - start.y) * (end.y - start.y)) / (lineLen * lineLen)
+            ));
+            
+            const projection = {
+                x: start.x + t * (end.x - start.x),
+                y: start.y + t * (end.y - start.y)
+            };
+            
+            return distance(point, projection) < threshold;
+        }
+        
         function imageToScreen(x, y) {
             return {
                 x: x * state.scale + state.offsetX,
@@ -601,7 +923,7 @@
                     const color = layer.type === 'calibrate' ? '#4ec9b0' : '#ce9178';
                     
                     ctx.strokeStyle = color;
-                    ctx.lineWidth = 2;
+                    ctx.lineWidth = 3;
                     ctx.beginPath();
                     ctx.moveTo(start.x, start.y);
                     ctx.lineTo(end.x, end.y);
@@ -613,21 +935,56 @@
                     // Draw distance label
                     const midX = (start.x + end.x) / 2;
                     const midY = (start.y + end.y) / 2;
+                    
+                    const displayDist = layer.type === 'calibrate' ? 
+                        (layer.originalDistance || layer.distance) : layer.distance;
+                    
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    ctx.font = 'bold 16px sans-serif';
+                    const text = displayDist.toFixed(2);
+                    const metrics = ctx.measureText(text);
+                    ctx.fillRect(midX - metrics.width/2 - 5, midY - 20, metrics.width + 10, 25);
+                    
                     ctx.fillStyle = color;
-                    ctx.font = '14px sans-serif';
-                    ctx.fillText(layer.distance.toFixed(2), midX + 10, midY - 10);
+                    ctx.textAlign = 'center';
+                    ctx.fillText(text, midX, midY - 3);
                 });
+                
+                // Draw temporary points
+                if (state.tempPoints.length > 0) {
+                    const color = state.mode === 'calibrate' ? '#4ec9b0' : '#ce9178';
+                    state.tempPoints.forEach(pt => {
+                        const screen = imageToScreen(pt.x, pt.y);
+                        drawPoint(screen.x, screen.y, color);
+                    });
+                    
+                    if (state.tempPoints.length === 1) {
+                        const start = imageToScreen(state.tempPoints[0].x, state.tempPoints[0].y);
+                        ctx.setLineDash([5, 5]);
+                        ctx.strokeStyle = color;
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.arc(start.x, start.y, 50, 0, Math.PI * 2);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    }
+                }
             }
         }
         
         function drawPoint(x, y, color) {
             ctx.fillStyle = color;
             ctx.beginPath();
-            ctx.arc(x, y, 5, 0, Math.PI * 2);
+            ctx.arc(x, y, 8, 0, Math.PI * 2);
             ctx.fill();
             ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 2;
             ctx.stroke();
+            
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, Math.PI * 2);
+            ctx.fill();
         }
         
         function resetView() {
@@ -653,11 +1010,14 @@
         }
         
         function updateUndoRedoButtons() {
-            document.getElementById('undoBtn').disabled = state.historyIndex < 0;
-            document.getElementById('redoBtn').disabled = state.historyIndex >= state.history.length - 1;
+            const undoBtns = [document.getElementById('undoBtn'), document.getElementById('undoBtnTop')];
+            const redoBtns = [document.getElementById('redoBtn'), document.getElementById('redoBtnTop')];
+            
+            undoBtns.forEach(btn => btn.disabled = state.historyIndex < 0);
+            redoBtns.forEach(btn => btn.disabled = state.historyIndex >= state.history.length - 1);
         }
         
-        document.getElementById('undoBtn').addEventListener('click', () => {
+        function undo() {
             if (state.historyIndex > 0) {
                 state.historyIndex--;
                 const historyState = state.history[state.historyIndex];
@@ -674,9 +1034,9 @@
                 updateUndoRedoButtons();
                 render();
             }
-        });
+        }
         
-        document.getElementById('redoBtn').addEventListener('click', () => {
+        function redo() {
             if (state.historyIndex < state.history.length - 1) {
                 state.historyIndex++;
                 const historyState = state.history[state.historyIndex];
@@ -686,14 +1046,19 @@
                 updateUndoRedoButtons();
                 render();
             }
-        });
+        }
+        
+        document.getElementById('undoBtn').addEventListener('click', undo);
+        document.getElementById('undoBtnTop').addEventListener('click', undo);
+        document.getElementById('redoBtn').addEventListener('click', redo);
+        document.getElementById('redoBtnTop').addEventListener('click', redo);
         
         document.getElementById('clearBtn').addEventListener('click', () => {
             if (confirm('Clear all measurements?')) {
                 state.layers = [];
                 state.calibrationFactor = null;
                 state.mode = null;
-                updateModeIndicator();
+                updateModeButtons();
                 saveHistory();
                 updateLayerList();
                 render();
@@ -720,7 +1085,7 @@
                 const color = layer.type === 'calibrate' ? '#4ec9b0' : '#ce9178';
                 
                 exportCtx.strokeStyle = color;
-                exportCtx.lineWidth = 3;
+                exportCtx.lineWidth = 4;
                 exportCtx.beginPath();
                 exportCtx.moveTo(layer.start.x, layer.start.y);
                 exportCtx.lineTo(layer.end.x, layer.end.y);
@@ -728,21 +1093,41 @@
                 
                 exportCtx.fillStyle = color;
                 exportCtx.beginPath();
-                exportCtx.arc(layer.start.x, layer.start.y, 8, 0, Math.PI * 2);
+                exportCtx.arc(layer.start.x, layer.start.y, 10, 0, Math.PI * 2);
                 exportCtx.fill();
                 exportCtx.beginPath();
-                exportCtx.arc(layer.end.x, layer.end.y, 8, 0, Math.PI * 2);
+                exportCtx.arc(layer.end.x, layer.end.y, 10, 0, Math.PI * 2);
                 exportCtx.fill();
+                
+                exportCtx.strokeStyle = '#fff';
+                exportCtx.lineWidth = 2;
+                exportCtx.beginPath();
+                exportCtx.arc(layer.start.x, layer.start.y, 10, 0, Math.PI * 2);
+                exportCtx.stroke();
+                exportCtx.beginPath();
+                exportCtx.arc(layer.end.x, layer.end.y, 10, 0, Math.PI * 2);
+                exportCtx.stroke();
                 
                 const midX = (layer.start.x + layer.end.x) / 2;
                 const midY = (layer.start.y + layer.end.y) / 2;
+                
+                const displayDist = layer.type === 'calibrate' ? 
+                    (layer.originalDistance || layer.distance) : layer.distance;
+                
+                exportCtx.font = 'bold 32px sans-serif';
+                const text = displayDist.toFixed(2);
+                const metrics = exportCtx.measureText(text);
+                
+                exportCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                exportCtx.fillRect(midX - metrics.width/2 - 10, midY - 35, metrics.width + 20, 40);
+                
                 exportCtx.fillStyle = color;
-                exportCtx.font = '24px sans-serif';
-                exportCtx.fillText(layer.distance.toFixed(2), midX + 15, midY - 15);
+                exportCtx.textAlign = 'center';
+                exportCtx.fillText(text, midX, midY - 5);
             });
             
             const link = document.createElement('a');
-            link.download = 'measurement.png';
+            link.download = 'measurement_' + Date.now() + '.png';
             link.href = exportCanvas.toDataURL();
             link.click();
         });
