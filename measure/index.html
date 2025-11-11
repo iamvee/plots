@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Measurement Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1e1e1e;
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+        }
+        
+        .sidebar {
+            width: 300px;
+            background: #252526;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid #3e3e42;
+        }
+        
+        .main-canvas {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: #1e1e1e;
+        }
+        
+        canvas {
+            position: absolute;
+            cursor: crosshair;
+        }
+        
+        .controls {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #3e3e42;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        button {
+            padding: 10px 15px;
+            background: #0e639c;
+            border: none;
+            color: white;
+            cursor: pointer;
+            border-radius: 3px;
+            font-size: 14px;
+            flex: 1;
+        }
+        
+        button:hover {
+            background: #1177bb;
+        }
+        
+        button:disabled {
+            background: #3e3e42;
+            cursor: not-allowed;
+        }
+        
+        button.active {
+            background: #16825d;
+        }
+        
+        input[type="file"] {
+            display: none;
+        }
+        
+        .file-label {
+            display: block;
+            padding: 10px 15px;
+            background: #0e639c;
+            text-align: center;
+            cursor: pointer;
+            border-radius: 3px;
+            margin-bottom: 10px;
+        }
+        
+        .file-label:hover {
+            background: #1177bb;
+        }
+        
+        .input-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 13px;
+            color: #ccc;
+        }
+        
+        input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            background: #3c3c3c;
+            border: 1px solid #555;
+            color: white;
+            border-radius: 3px;
+        }
+        
+        .layer-list {
+            margin-top: 20px;
+        }
+        
+        .layer-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            background: #2d2d30;
+            margin-bottom: 5px;
+            border-radius: 3px;
+            gap: 10px;
+        }
+        
+        .layer-item:hover {
+            background: #3e3e42;
+        }
+        
+        .layer-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        
+        .layer-item span {
+            flex: 1;
+            font-size: 13px;
+        }
+        
+        .layer-item .delete-btn {
+            padding: 5px 10px;
+            background: #d32f2f;
+            font-size: 12px;
+        }
+        
+        .layer-item .delete-btn:hover {
+            background: #f44336;
+        }
+        
+        h3 {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #ccc;
+            text-transform: uppercase;
+        }
+        
+        .info {
+            background: #2d2d30;
+            padding: 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+        
+        .mode-indicator {
+            background: #16825d;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .calibration-badge {
+            color: #4ec9b0;
+        }
+        
+        .measure-badge {
+            color: #ce9178;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <div class="controls">
+            <h3>Image Source</h3>
+            <label class="file-label" for="fileInput">
+                📁 Upload Image
+            </label>
+            <input type="file" id="fileInput" accept="image/*">
+            
+            <button id="cameraBtn">📷 Use Camera</button>
+            <button id="captureBtn" style="display:none; background: #16825d;">📸 Capture</button>
+            <button id="stopCameraBtn" style="display:none; background: #d32f2f;">⏹ Stop Camera</button>
+        </div>
+        
+        <div class="controls">
+            <h3>Tools</h3>
+            <div id="modeIndicator" class="mode-indicator">Select a tool to begin</div>
+            
+            <button id="calibrateBtn">📏 Calibrate</button>
+            <div class="input-group" id="calibrationInput" style="display:none;">
+                <label>Known Distance (units):</label>
+                <input type="number" id="knownDistance" step="0.01" placeholder="e.g., 100">
+            </div>
+            
+            <button id="measureBtn">📐 Measure</button>
+            
+            <div class="btn-group" style="margin-top: 10px;">
+                <button id="undoBtn">↶ Undo</button>
+                <button id="redoBtn">↷ Redo</button>
+            </div>
+            
+            <button id="clearBtn" style="background: #d32f2f; margin-top: 10px;">🗑️ Clear All</button>
+        </div>
+        
+        <div class="controls">
+            <h3>Layers</h3>
+            <div id="layerList" class="layer-list"></div>
+        </div>
+        
+        <div class="controls">
+            <h3>Export</h3>
+            <button id="exportBtn">💾 Save Image</button>
+            <div class="info">
+                <strong>Controls:</strong><br>
+                • Mouse wheel: Zoom<br>
+                • Click + Drag: Pan<br>
+                • ESC: Cancel drawing
+            </div>
+        </div>
+    </div>
+    
+    <div class="main-canvas">
+        <canvas id="canvas"></canvas>
+        <video id="video" style="display:none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain;" autoplay></video>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const video = document.getElementById('video');
+        let cameraStream = null;
+        
+        let state = {
+            image: null,
+            scale: 1,
+            offsetX: 0,
+            offsetY: 0,
+            mode: null, // 'calibrate' or 'measure'
+            drawing: false,
+            startPoint: null,
+            calibrationFactor: null,
+            layers: [],
+            history: [],
+            historyIndex: -1,
+            isDragging: false,
+            lastMousePos: null
+        };
+        
+        // Initialize canvas size
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+            render();
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        
+        // File upload
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        state.image = img;
+                        resetView();
+                        render();
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+        
+        // Camera
+        document.getElementById('cameraBtn').addEventListener('click', async () => {
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } } 
+                });
+                video.srcObject = cameraStream;
+                video.style.display = 'block';
+                canvas.style.display = 'none';
+                
+                document.getElementById('cameraBtn').style.display = 'none';
+                document.getElementById('captureBtn').style.display = 'block';
+                document.getElementById('stopCameraBtn').style.display = 'block';
+            } catch (err) {
+                alert('Camera access denied or not available');
+            }
+        });
+        
+        document.getElementById('captureBtn').addEventListener('click', () => {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = video.videoWidth;
+            tempCanvas.height = video.videoHeight;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(video, 0, 0);
+            
+            const img = new Image();
+            img.onload = () => {
+                state.image = img;
+                resetView();
+                render();
+                stopCamera();
+            };
+            img.src = tempCanvas.toDataURL();
+        });
+        
+        document.getElementById('stopCameraBtn').addEventListener('click', () => {
+            stopCamera();
+        });
+        
+        function stopCamera() {
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+                cameraStream = null;
+            }
+            video.style.display = 'none';
+            canvas.style.display = 'block';
+            document.getElementById('cameraBtn').style.display = 'block';
+            document.getElementById('captureBtn').style.display = 'none';
+            document.getElementById('stopCameraBtn').style.display = 'none';
+        }
+        
+        // Mode selection
+        document.getElementById('calibrateBtn').addEventListener('click', () => {
+            state.mode = 'calibrate';
+            updateModeIndicator();
+            document.getElementById('calibrationInput').style.display = 'block';
+        });
+        
+        document.getElementById('measureBtn').addEventListener('click', () => {
+            if (!state.calibrationFactor) {
+                alert('Please calibrate first by drawing a line with known distance');
+                return;
+            }
+            state.mode = 'measure';
+            updateModeIndicator();
+            document.getElementById('calibrationInput').style.display = 'none';
+        });
+        
+        function updateModeIndicator() {
+            const indicator = document.getElementById('modeIndicator');
+            if (state.mode === 'calibrate') {
+                indicator.textContent = '📏 Calibration Mode';
+                indicator.style.background = '#16825d';
+                document.getElementById('calibrateBtn').classList.add('active');
+                document.getElementById('measureBtn').classList.remove('active');
+            } else if (state.mode === 'measure') {
+                indicator.textContent = '📐 Measurement Mode';
+                indicator.style.background = '#b5651d';
+                document.getElementById('calibrateBtn').classList.remove('active');
+                document.getElementById('measureBtn').classList.add('active');
+            } else {
+                indicator.textContent = 'Select a tool to begin';
+                indicator.style.background = '#2d2d30';
+                document.getElementById('calibrateBtn').classList.remove('active');
+                document.getElementById('measureBtn').classList.remove('active');
+            }
+        }
+        
+        // Mouse events
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (state.mode === 'calibrate' || state.mode === 'measure') {
+                state.drawing = true;
+                state.startPoint = screenToImage(x, y);
+            } else {
+                state.isDragging = true;
+                state.lastMousePos = { x, y };
+                canvas.style.cursor = 'grab';
+            }
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (state.drawing && state.startPoint) {
+                render();
+                const currentPoint = screenToImage(x, y);
+                const startScreen = imageToScreen(state.startPoint.x, state.startPoint.y);
+                const endScreen = imageToScreen(currentPoint.x, currentPoint.y);
+                
+                ctx.strokeStyle = state.mode === 'calibrate' ? '#4ec9b0' : '#ce9178';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(startScreen.x, startScreen.y);
+                ctx.lineTo(endScreen.x, endScreen.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                drawPoint(startScreen.x, startScreen.y, state.mode === 'calibrate' ? '#4ec9b0' : '#ce9178');
+                drawPoint(endScreen.x, endScreen.y, state.mode === 'calibrate' ? '#4ec9b0' : '#ce9178');
+            } else if (state.isDragging && state.lastMousePos) {
+                const dx = x - state.lastMousePos.x;
+                const dy = y - state.lastMousePos.y;
+                state.offsetX += dx;
+                state.offsetY += dy;
+                state.lastMousePos = { x, y };
+                render();
+            }
+        });
+        
+        canvas.addEventListener('mouseup', (e) => {
+            if (state.drawing && state.startPoint) {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const endPoint = screenToImage(x, y);
+                
+                if (state.mode === 'calibrate') {
+                    const distance = parseFloat(document.getElementById('knownDistance').value);
+                    if (!distance || distance <= 0) {
+                        alert('Please enter a valid known distance');
+                        state.drawing = false;
+                        state.startPoint = null;
+                        render();
+                        return;
+                    }
+                    
+                    const pixelDistance = Math.sqrt(
+                        Math.pow(endPoint.x - state.startPoint.x, 2) +
+                        Math.pow(endPoint.y - state.startPoint.y, 2)
+                    );
+                    
+                    state.calibrationFactor = distance / pixelDistance;
+                    
+                    addLayer({
+                        type: 'calibrate',
+                        start: state.startPoint,
+                        end: endPoint,
+                        distance: distance,
+                        visible: true
+                    });
+                    
+                    saveHistory();
+                } else if (state.mode === 'measure') {
+                    const pixelDistance = Math.sqrt(
+                        Math.pow(endPoint.x - state.startPoint.x, 2) +
+                        Math.pow(endPoint.y - state.startPoint.y, 2)
+                    );
+                    
+                    const realDistance = pixelDistance * state.calibrationFactor;
+                    
+                    addLayer({
+                        type: 'measure',
+                        start: state.startPoint,
+                        end: endPoint,
+                        distance: realDistance,
+                        visible: true
+                    });
+                    
+                    saveHistory();
+                }
+                
+                state.drawing = false;
+                state.startPoint = null;
+                render();
+            }
+            
+            if (state.isDragging) {
+                state.isDragging = false;
+                state.lastMousePos = null;
+                canvas.style.cursor = 'crosshair';
+            }
+        });
+        
+        // Zoom with mouse wheel
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            const oldScale = state.scale;
+            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            state.scale *= zoomFactor;
+            state.scale = Math.max(0.1, Math.min(10, state.scale));
+            
+            // Adjust offset to zoom towards mouse position
+            state.offsetX = mouseX - (mouseX - state.offsetX) * (state.scale / oldScale);
+            state.offsetY = mouseY - (mouseY - state.offsetY) * (state.scale / oldScale);
+            
+            render();
+        });
+        
+        // Cancel drawing with ESC
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && state.drawing) {
+                state.drawing = false;
+                state.startPoint = null;
+                render();
+            }
+        });
+        
+        // Layer management
+        function addLayer(layer) {
+            layer.id = Date.now() + Math.random();
+            state.layers.push(layer);
+            updateLayerList();
+        }
+        
+        function updateLayerList() {
+            const layerList = document.getElementById('layerList');
+            layerList.innerHTML = '';
+            
+            state.layers.forEach((layer, index) => {
+                const item = document.createElement('div');
+                item.className = 'layer-item';
+                
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = layer.visible;
+                checkbox.addEventListener('change', () => {
+                    layer.visible = checkbox.checked;
+                    render();
+                });
+                
+                const label = document.createElement('span');
+                if (layer.type === 'calibrate') {
+                    label.innerHTML = `<span class="calibration-badge">📏</span> Calibration: ${layer.distance.toFixed(2)}`;
+                } else {
+                    label.innerHTML = `<span class="measure-badge">📐</span> Measure: ${layer.distance.toFixed(2)}`;
+                }
+                
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.textContent = '✕';
+                deleteBtn.addEventListener('click', () => {
+                    state.layers.splice(index, 1);
+                    updateLayerList();
+                    saveHistory();
+                    render();
+                });
+                
+                item.appendChild(checkbox);
+                item.appendChild(label);
+                item.appendChild(deleteBtn);
+                layerList.appendChild(item);
+            });
+        }
+        
+        // Coordinate transformation
+        function imageToScreen(x, y) {
+            return {
+                x: x * state.scale + state.offsetX,
+                y: y * state.scale + state.offsetY
+            };
+        }
+        
+        function screenToImage(x, y) {
+            return {
+                x: (x - state.offsetX) / state.scale,
+                y: (y - state.offsetY) / state.scale
+            };
+        }
+        
+        // Rendering
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (state.image) {
+                const pos = imageToScreen(0, 0);
+                const width = state.image.width * state.scale;
+                const height = state.image.height * state.scale;
+                ctx.drawImage(state.image, pos.x, pos.y, width, height);
+                
+                // Draw layers
+                state.layers.forEach(layer => {
+                    if (!layer.visible) return;
+                    
+                    const start = imageToScreen(layer.start.x, layer.start.y);
+                    const end = imageToScreen(layer.end.x, layer.end.y);
+                    const color = layer.type === 'calibrate' ? '#4ec9b0' : '#ce9178';
+                    
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(start.x, start.y);
+                    ctx.lineTo(end.x, end.y);
+                    ctx.stroke();
+                    
+                    drawPoint(start.x, start.y, color);
+                    drawPoint(end.x, end.y, color);
+                    
+                    // Draw distance label
+                    const midX = (start.x + end.x) / 2;
+                    const midY = (start.y + end.y) / 2;
+                    ctx.fillStyle = color;
+                    ctx.font = '14px sans-serif';
+                    ctx.fillText(layer.distance.toFixed(2), midX + 10, midY - 10);
+                });
+            }
+        }
+        
+        function drawPoint(x, y, color) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+        
+        function resetView() {
+            if (!state.image) return;
+            
+            const scaleX = canvas.width / state.image.width;
+            const scaleY = canvas.height / state.image.height;
+            state.scale = Math.min(scaleX, scaleY) * 0.9;
+            
+            state.offsetX = (canvas.width - state.image.width * state.scale) / 2;
+            state.offsetY = (canvas.height - state.image.height * state.scale) / 2;
+        }
+        
+        // History management
+        function saveHistory() {
+            state.history = state.history.slice(0, state.historyIndex + 1);
+            state.history.push(JSON.parse(JSON.stringify({
+                layers: state.layers,
+                calibrationFactor: state.calibrationFactor
+            })));
+            state.historyIndex++;
+            updateUndoRedoButtons();
+        }
+        
+        function updateUndoRedoButtons() {
+            document.getElementById('undoBtn').disabled = state.historyIndex < 0;
+            document.getElementById('redoBtn').disabled = state.historyIndex >= state.history.length - 1;
+        }
+        
+        document.getElementById('undoBtn').addEventListener('click', () => {
+            if (state.historyIndex > 0) {
+                state.historyIndex--;
+                const historyState = state.history[state.historyIndex];
+                state.layers = JSON.parse(JSON.stringify(historyState.layers));
+                state.calibrationFactor = historyState.calibrationFactor;
+                updateLayerList();
+                updateUndoRedoButtons();
+                render();
+            } else if (state.historyIndex === 0) {
+                state.historyIndex--;
+                state.layers = [];
+                state.calibrationFactor = null;
+                updateLayerList();
+                updateUndoRedoButtons();
+                render();
+            }
+        });
+        
+        document.getElementById('redoBtn').addEventListener('click', () => {
+            if (state.historyIndex < state.history.length - 1) {
+                state.historyIndex++;
+                const historyState = state.history[state.historyIndex];
+                state.layers = JSON.parse(JSON.stringify(historyState.layers));
+                state.calibrationFactor = historyState.calibrationFactor;
+                updateLayerList();
+                updateUndoRedoButtons();
+                render();
+            }
+        });
+        
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            if (confirm('Clear all measurements?')) {
+                state.layers = [];
+                state.calibrationFactor = null;
+                state.mode = null;
+                updateModeIndicator();
+                saveHistory();
+                updateLayerList();
+                render();
+            }
+        });
+        
+        // Export
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            if (!state.image) {
+                alert('No image to export');
+                return;
+            }
+            
+            const exportCanvas = document.createElement('canvas');
+            exportCanvas.width = state.image.width;
+            exportCanvas.height = state.image.height;
+            const exportCtx = exportCanvas.getContext('2d');
+            
+            exportCtx.drawImage(state.image, 0, 0);
+            
+            state.layers.forEach(layer => {
+                if (!layer.visible) return;
+                
+                const color = layer.type === 'calibrate' ? '#4ec9b0' : '#ce9178';
+                
+                exportCtx.strokeStyle = color;
+                exportCtx.lineWidth = 3;
+                exportCtx.beginPath();
+                exportCtx.moveTo(layer.start.x, layer.start.y);
+                exportCtx.lineTo(layer.end.x, layer.end.y);
+                exportCtx.stroke();
+                
+                exportCtx.fillStyle = color;
+                exportCtx.beginPath();
+                exportCtx.arc(layer.start.x, layer.start.y, 8, 0, Math.PI * 2);
+                exportCtx.fill();
+                exportCtx.beginPath();
+                exportCtx.arc(layer.end.x, layer.end.y, 8, 0, Math.PI * 2);
+                exportCtx.fill();
+                
+                const midX = (layer.start.x + layer.end.x) / 2;
+                const midY = (layer.start.y + layer.end.y) / 2;
+                exportCtx.fillStyle = color;
+                exportCtx.font = '24px sans-serif';
+                exportCtx.fillText(layer.distance.toFixed(2), midX + 15, midY - 15);
+            });
+            
+            const link = document.createElement('a');
+            link.download = 'measurement.png';
+            link.href = exportCanvas.toDataURL();
+            link.click();
+        });
+        
+        updateUndoRedoButtons();
+    </script>
+</body>
+</html>
