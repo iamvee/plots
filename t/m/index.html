@@ -429,11 +429,43 @@
         document.getElementById('captureBtn').addEventListener('click', captureImage);
         
         function captureImage() {
+            // Get the visible canvas dimensions
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
+            
+            // Calculate video aspect ratio and canvas aspect ratio
+            const videoAspect = video.videoWidth / video.videoHeight;
+            const canvasAspect = canvasWidth / canvasHeight;
+            
+            let sourceX, sourceY, sourceWidth, sourceHeight;
+            
+            // Video is using object-fit: cover, so we need to calculate what's visible
+            if (videoAspect > canvasAspect) {
+                // Video is wider - height fits, width is cropped
+                sourceHeight = video.videoHeight;
+                sourceWidth = video.videoHeight * canvasAspect;
+                sourceX = (video.videoWidth - sourceWidth) / 2;
+                sourceY = 0;
+            } else {
+                // Video is taller - width fits, height is cropped
+                sourceWidth = video.videoWidth;
+                sourceHeight = video.videoWidth / canvasAspect;
+                sourceX = 0;
+                sourceY = (video.videoHeight - sourceHeight) / 2;
+            }
+            
+            // Create canvas with the same aspect ratio as the visible area
             const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = video.videoWidth;
-            tempCanvas.height = video.videoHeight;
+            tempCanvas.width = sourceWidth;
+            tempCanvas.height = sourceHeight;
             const tempCtx = tempCanvas.getContext('2d');
-            tempCtx.drawImage(video, 0, 0);
+            
+            // Draw only the visible portion
+            tempCtx.drawImage(
+                video,
+                sourceX, sourceY, sourceWidth, sourceHeight,
+                0, 0, sourceWidth, sourceHeight
+            );
             
             const img = new Image();
             img.onload = () => {
