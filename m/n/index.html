@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Note Mapper</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-dark': '#0f172a',
+                        'secondary-dark': '#1e293b',
+                        'panel-dark': '#334155',
+                        'accent': '#fbbf24', // Amber
+                        'highlight-exact': '#ef4444', // Red for exact octave match
+                        'piano-white': '#f8fafc',
+                        'piano-black': '#1f2937',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* --- GLOBAL & UTILS --- */
+        body {
+            background-color: var(--tw-bg-primary-dark);
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* --- PIANO STYLES --- */
+        .piano-container {
+            perspective: 1000px;
+        }
+        .key {
+            position: relative;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.1s ease;
+        }
+        .white-key {
+            width: 36px;
+            height: 140px;
+            background: linear-gradient(to bottom, #fff 0%, #eee 100%);
+            border: 1px solid #94a3b8;
+            border-bottom-left-radius: 4px;
+            border-bottom-right-radius: 4px;
+            z-index: 1;
+        }
+        .white-key:active {
+            background: #ddd;
+            transform: translateY(2px);
+        }
+        .black-key {
+            width: 24px;
+            height: 90px;
+            background: linear-gradient(to bottom, #333 0%, #000 100%);
+            margin-left: -12px;
+            margin-right: -12px;
+            z-index: 2;
+            border-bottom-left-radius: 4px;
+            border-bottom-right-radius: 4px;
+            box-shadow: 2px 2px 2px rgba(0,0,0,0.3);
+        }
+        .black-key:active {
+            transform: translateY(2px);
+        }
+
+        /* --- FRETBOARD STYLES --- */
+        .fretboard-container {
+            overflow-x: auto;
+            position: relative;
+        }
+        
+        /* Guitar Styling */
+        .fretboard-guitar { background-color: #581c87; } /* Purple */
+        .fretboard-bass { background-color: #374151; } /* Dark Gray */
+        .fretboard-uke { background-color: #854d0e; } /* Brown */
+
+        .string-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            background-color: #cbd5e1;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.3);
+            pointer-events: none;
+            transform: translateY(-50%);
+        }
+
+        .fret-line {
+            width: 1px; /* Thinner frets */
+            height: 100%;
+            background-color: #94a3b8;
+            flex-shrink: 0;
+        }
+        
+        .nut {
+            width: 8px;
+            height: 100%;
+            background-color: #e2e8f0;
+            flex-shrink: 0;
+            border-right: 2px solid #94a3b8;
+        }
+
+        .note-marker {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: #94a3b8; /* Dim text by default */
+            background-color: rgba(15, 23, 42, 0.6); /* Semi-transparent dark bg */
+            border: 1px solid #475569;
+            z-index: 10;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .note-marker:hover {
+            transform: scale(1.15);
+            background-color: #1e293b;
+            color: #fff;
+            border-color: #cbd5e1;
+            z-index: 15;
+        }
+
+        /* --- HIGHLIGHTING --- */
+        /* General Note Match (Amber) */
+        .active-note {
+            background-color: var(--tw-bg-accent) !important;
+            color: #000 !important;
+            box-shadow: 0 0 10px var(--tw-bg-accent);
+            border-color: #000;
+            transform: scale(1.1);
+            opacity: 1 !important;
+            z-index: 20;
+        }
+        
+        /* Exact Octave Match (Red) */
+        .active-exact {
+            background-color: #ef4444 !important; /* Red 500 */
+            color: #fff !important;
+            box-shadow: 0 0 12px #ef4444;
+            transform: scale(1.2);
+            opacity: 1 !important;
+            z-index: 25;
+        }
+
+        /* Inlays */
+        .inlay {
+            position: absolute;
+            background-color: rgba(255,255,255,0.15);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="text-white min-h-screen flex flex-col p-2 sm:p-6 pb-20">
+
+    <header class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 border-b border-gray-700 pb-4">
+
+        <div class="flex items-center gap-4 bg-secondary-dark p-3 rounded-lg shadow-md">
+            <div class="flex flex-col">
+                <label class="text-xs text-gray-400 font-semibold uppercase mb-1">Highlight Mode</label>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-accent">Same Note Name</span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="octaveToggle" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
+                        <span class="ml-2 text-xs font-medium text-gray-300">Exact Octave</span>
+                    </label>
+                </div>
+            </div>
+            
+            <button onclick="clearAll()" class="px-3 py-1 text-xs bg-gray-600 hover:bg-gray-500 rounded text-white transition">Clear All</button>
+        </div>
+    </header>
+
+    <main class="space-y-8 w-full max-w-[1400px] mx-auto">
+        
+        <!-- --- GUITAR SECTION --- -->
+        <section class="bg-secondary-dark rounded-xl p-4 shadow-xl border border-gray-700">
+            <div class="flex flex-wrap justify-between items-end mb-4 gap-2">
+                <h2 class="text-lg font-bold text-purple-400 flex items-center gap-2">
+                    🎸 Guitar 
+                    <span class="text-xs text-gray-500 font-normal border border-gray-600 px-2 py-0.5 rounded">6 String</span>
+                </h2>
+                <div class="flex items-center gap-2">
+                    <label class="text-xs text-gray-400">Tuning:</label>
+                    <select id="guitar-preset" class="bg-gray-800 border border-gray-600 text-xs rounded p-1 focus:ring-1 focus:ring-accent outline-none">
+                        <option value="standard">Standard (E A D G B e)</option>
+                        <option value="drop_d">Drop D (D A D G B e)</option>
+                        <option value="open_g">Open G (D G D G B d)</option>
+                        <option value="dadgad">DADGAD</option>
+                        <option value="half_step">Half-Step Down</option>
+                    </select>
+                </div>
+            </div>
+            <!-- Custom Tuning Indicators (Dynamic) -->
+            <div id="guitar-tuners" class="flex flex-col-reverse justify-start pl-[8px] mb-2 gap-1 absolute left-2 top-16 hidden"></div> 
+            <!-- Note: Tuners are now handled inside the fretboard loop for cleaner alignment -->
+            
+            <div class="fretboard-container scrollbar-hide">
+                <div id="guitar-board" class="fretboard fretboard-guitar rounded-lg h-[170px] min-w-max relative shadow-inner">
+                    <!-- JS Injected -->
+                </div>
+            </div>
+        </section>
+
+        <!-- --- BASS SECTION --- -->
+        <section class="bg-secondary-dark rounded-xl p-4 shadow-xl border border-gray-700">
+            <div class="flex flex-wrap justify-between items-end mb-4 gap-2">
+                <h2 class="text-lg font-bold text-gray-300 flex items-center gap-2">
+                    🎸 Bass
+                    <span class="text-xs text-gray-500 font-normal border border-gray-600 px-2 py-0.5 rounded">4 String</span>
+                </h2>
+                <div class="flex items-center gap-2">
+                    <label class="text-xs text-gray-400">Tuning:</label>
+                    <select id="bass-preset" class="bg-gray-800 border border-gray-600 text-xs rounded p-1 focus:ring-1 focus:ring-accent outline-none">
+                        <option value="standard">Standard (E A D G)</option>
+                        <option value="drop_d">Drop D (D A D G)</option>
+                        <option value="standard_5">Standard (5-Str: B E A D G)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="fretboard-container scrollbar-hide">
+                <div id="bass-board" class="fretboard fretboard-bass rounded-lg h-[130px] min-w-max relative shadow-inner">
+                    <!-- JS Injected -->
+                </div>
+            </div>
+        </section>
+
+        <!-- --- UKULELE SECTION --- -->
+        <section class="bg-secondary-dark rounded-xl p-4 shadow-xl border border-gray-700">
+            <div class="flex flex-wrap justify-between items-end mb-4 gap-2">
+                <h2 class="text-lg font-bold text-yellow-600 flex items-center gap-2">
+                    🏝️ Ukulele
+                    <span class="text-xs text-gray-500 font-normal border border-gray-600 px-2 py-0.5 rounded">Standard (Re-entrant)</span>
+                </h2>
+                <div class="flex items-center gap-2">
+                    <label class="text-xs text-gray-400">Tuning:</label>
+                    <select id="uke-preset" class="bg-gray-800 border border-gray-600 text-xs rounded p-1 focus:ring-1 focus:ring-accent outline-none">
+                        <option value="standard">Standard High-G (g C E A)</option>
+                        <option value="low_g">Low G (G C E A)</option>
+                        <option value="d_tuning">D Tuning (a D F# B)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="fretboard-container scrollbar-hide">
+                <div id="uke-board" class="fretboard fretboard-uke rounded-lg h-[120px] min-w-max relative shadow-inner">
+                    <!-- JS Injected -->
+                </div>
+            </div>
+        </section>
+
+        <!-- --- PIANO SECTION --- -->
+        <section class="bg-secondary-dark rounded-xl p-4 shadow-xl border border-gray-700 sticky bottom-4 z-50">
+            <h2 class="text-lg font-bold text-gray-100 mb-2">🎹 Piano (88 Keys)</h2>
+            <div id="piano-wrapper" class="overflow-x-auto pb-2 scrollbar-hide">
+                <div id="piano" class="flex h-[140px] relative min-w-max select-none">
+                    <!-- JS Injected -->
+                </div>
+            </div>
+            <div class="text-center text-xs text-gray-500 mt-1 flex justify-center gap-4">
+                <span class="flex items-center gap-1"><span class="block w-3 h-3 bg-accent rounded-full border border-black"></span> Note Match</span>
+                <span class="flex items-center gap-1"><span class="block w-3 h-3 bg-red-500 rounded-full border border-black"></span> Exact Octave Match</span>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // --- CONSTANTS & DATA ---
+        const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+        const NUM_FRETS = 24;
+        
+        // --- STATE ---
+        let state = {
+            matchExactOctave: false,
+            selectedNote: null, // { noteName: "C", midi: 60 }
+            instruments: {
+                guitar: { 
+                    tuning: [40, 45, 50, 55, 59, 64], // E2 A2 D3 G3 B3 E4
+                    containerId: 'guitar-board',
+                },
+                bass: { 
+                    tuning: [28, 33, 38, 43], // E1 A1 D2 G2
+                    containerId: 'bass-board',
+                    isBass: true
+                },
+                uke: { 
+                    tuning: [67, 60, 64, 69], // G4 C4 E4 A4 (Re-entrant High G)
+                    containerId: 'uke-board',
+                }
+            }
+        };
+
+        const TUNING_PRESETS = {
+            guitar: {
+                standard: [40, 45, 50, 55, 59, 64],
+                drop_d: [38, 45, 50, 55, 59, 64],
+                open_g: [38, 43, 50, 55, 59, 62],
+                dadgad: [38, 45, 50, 55, 57, 62],
+                half_step: [39, 44, 49, 54, 58, 63]
+            },
+            bass: {
+                standard: [28, 33, 38, 43],
+                drop_d: [26, 33, 38, 43],
+                standard_5: [23, 28, 33, 38, 43] // B0 E1 A1 D2 G2
+            },
+            uke: {
+                standard: [67, 60, 64, 69], // g C E A
+                low_g: [55, 60, 64, 69],    // G3 C4 E4 A4
+                d_tuning: [69, 62, 66, 71]  // a D F# B
+            }
+        };
+
+        // --- UTILS ---
+        function midiToNote(midi) {
+            const noteIndex = (midi) % 12;
+            const octave = Math.floor(midi / 12) - 1;
+            const noteName = NOTES[noteIndex];
+            return { 
+                noteName, 
+                octave, 
+                fullName: `${noteName}${octave}`, 
+                cssClass: noteName.replace('#', 's') 
+            };
+        }
+
+        function createEl(tag, classes = [], content = '') {
+            const el = document.createElement(tag);
+            // FIX: Filter out empty strings/falsy values before adding to classList
+            const validClasses = classes.filter(c => c && c.trim() !== '');
+            if (validClasses.length) el.classList.add(...validClasses);
+            if (content) el.innerHTML = content;
+            return el;
+        }
+
+        // --- RENDERING CORE ---
+
+        function renderAll() {
+            renderPiano();
+            renderFretboard('guitar');
+            renderFretboard('bass');
+            renderFretboard('uke');
+            
+            // Re-apply highlights if note is selected
+            if (state.selectedNote) {
+                highlightNote(state.selectedNote.noteName, state.selectedNote.midi);
+            }
+        }
+
+        // --- PIANO ---
+        function renderPiano() {
+            const container = document.getElementById('piano');
+            container.innerHTML = '';
+            
+            // Standard 88 keys: A0 (21) to C8 (108)
+            for (let m = 21; m <= 108; m++) {
+                const { noteName, octave, fullName, cssClass } = midiToNote(m);
+                const isBlack = noteName.includes('#');
+                
+                const key = createEl('div', ['key', isBlack ? 'black-key' : 'white-key']);
+                key.dataset.midi = m;
+                key.dataset.note = noteName;
+                
+                // Labels for C
+                if (noteName === 'C') {
+                    key.innerHTML = `<span class="absolute bottom-1 left-1/2 -translate-x-1/2 text-[10px] text-gray-500 font-mono pointer-events-none">${octave}</span>`;
+                }
+
+                key.onclick = (e) => handleNoteClick(m, noteName);
+                container.appendChild(key);
+            }
+        }
+
+        // --- FRETBOARDS ---
+        function renderFretboard(instKey) {
+            const config = state.instruments[instKey];
+            const container = document.getElementById(config.containerId);
+            
+            container.innerHTML = '';
+            // Remove previous references to external tuner containers as we will embed them
+
+            const numStrings = config.tuning.length;
+            // Width calc: Nut (30px) + Frets * 45px
+            const boardWidth = 30 + (NUM_FRETS + 1) * 45;
+            container.style.width = `${boardWidth}px`;
+            
+            // 1. Draw Inlays (Background)
+            renderInlays(container, numStrings, boardWidth);
+
+            // 2. Render Fret Numbers (Guides) - NEW
+            renderFretNumbers(container);
+
+            // 3. Render Strings & Frets (REVERSED for standard TAB view: High E on top)
+            // Create a reversed copy for iteration so index 0 = visual top
+            const visualTuning = [...config.tuning].reverse();
+
+            visualTuning.forEach((openMidi, stringIdx) => {
+                // Determine Visual Thickness based on index
+                // As stringIdx increases (goes down the screen), it represents lower strings (thicker)
+                const baseThickness = config.isBass ? 2 : 1;
+                const thickness = baseThickness + (stringIdx * 0.5); 
+
+                // String visual line
+                const stringLine = createEl('div', ['string-line']);
+                // Position string vertically centered in its row
+                const rowHeight = 100 / numStrings;
+                stringLine.style.top = `${(stringIdx * rowHeight) + (rowHeight / 2)}%`;
+                stringLine.style.height = `${thickness}px`; // Dynamic thickness
+                container.appendChild(stringLine);
+
+                // Create row container for logic (grid overlay)
+                const row = createEl('div', ['absolute', 'w-full', 'flex'], '');
+                row.style.height = `${rowHeight}%`;
+                row.style.top = `${stringIdx * rowHeight}%`;
+                
+                // --- TUNER DISPLAY (Integrated into fretboard start) ---
+                const openNoteInfo = midiToNote(openMidi);
+                
+                // --- FRETS ---
+                // Nut (Fret 0)
+                const nut = createEl('div', ['nut', 'flex', 'items-center', 'justify-center', 'relative']);
+                
+                // Nut Label (Open Note)
+                const nutLabel = createEl('div', ['absolute', '-left-8', 'text-xs', 'text-gray-400', 'font-mono', 'w-6', 'text-right'], 
+                   `${openNoteInfo.noteName}${openNoteInfo.octave}`);
+                nut.appendChild(nutLabel);
+
+                const openMarker = createNoteMarker(openMidi, openNoteInfo);
+                nut.appendChild(openMarker);
+                row.appendChild(nut);
+
+                // Frets 1-24
+                for (let f = 1; f <= NUM_FRETS; f++) {
+                    const currentMidi = openMidi + f;
+                    const info = midiToNote(currentMidi);
+                    
+                    const fretDiv = createEl('div', ['fret-line', 'flex', 'items-center', 'justify-center', 'relative']);
+                    fretDiv.style.width = '45px'; // Fixed width per fret
+                    fretDiv.style.borderRight = '1px solid #94a3b8'; // Fret wire (thin)
+
+                    // Marker
+                    const marker = createNoteMarker(currentMidi, info);
+                    fretDiv.appendChild(marker);
+                    row.appendChild(fretDiv);
+                }
+                
+                container.appendChild(row);
+            });
+        }
+
+        function renderFretNumbers(container) {
+            const guideFrets = [3, 5, 7, 9, 12, 15, 17, 19, 21, 24];
+            
+            guideFrets.forEach(f => {
+                // Calculate position based on fret width logic
+                // Nut is 30px. Frets are 45px. Center of fret F is 30 + (F-1)*45 + 22.5
+                const leftPos = 30 + (f - 1) * 45 + 22.5; 
+                
+                const num = createEl('div', 
+                    ['absolute', 'bottom-1', 'text-[10px]', 'font-bold', 'text-white/40', '-translate-x-1/2', 'pointer-events-none', 'select-none'], 
+                    f.toString()
+                );
+                num.style.left = `${leftPos}px`;
+                container.appendChild(num);
+            });
+        }
+
+        function createNoteMarker(midi, info) {
+            const marker = createEl('div', ['note-marker']);
+            marker.dataset.midi = midi;
+            marker.dataset.note = info.noteName;
+            marker.textContent = info.noteName;
+            
+            // Click handler
+            marker.onclick = (e) => {
+                e.stopPropagation();
+                handleNoteClick(midi, info.noteName);
+            };
+            return marker;
+        }
+
+        function renderInlays(container, numStrings, width) {
+            const inlayFrets = [3, 5, 7, 9, 15, 17, 19, 21];
+            const doubleFrets = [12, 24];
+            
+            // Helper to get center px of a fret
+            // Nut is 30px. Frets are 45px. Center of fret F is 30 + (F-1)*45 + 22.5
+            const getFretCenter = (f) => 30 + (f - 1) * 45 + 22.5;
+
+            inlayFrets.forEach(f => {
+                const dot = createEl('div', ['inlay', 'w-3', 'h-3']);
+                dot.style.left = `${getFretCenter(f)}px`;
+                dot.style.top = '50%';
+                container.appendChild(dot);
+            });
+
+            doubleFrets.forEach(f => {
+                const dot1 = createEl('div', ['inlay', 'w-3', 'h-3']);
+                dot1.style.left = `${getFretCenter(f)}px`;
+                dot1.style.top = '25%';
+                
+                const dot2 = createEl('div', ['inlay', 'w-3', 'h-3']);
+                dot2.style.left = `${getFretCenter(f)}px`;
+                dot2.style.top = '75%';
+
+                container.appendChild(dot1);
+                container.appendChild(dot2);
+            });
+        }
+
+        // --- INTERACTION ---
+
+        function handleNoteClick(midi, noteName) {
+            state.selectedNote = { midi, noteName };
+            highlightNote(noteName, midi);
+        }
+
+        function highlightNote(targetNoteName, targetMidi) {
+            // 1. Clear previous
+            document.querySelectorAll('.active-note, .active-exact').forEach(el => {
+                el.classList.remove('active-note', 'active-exact');
+            });
+
+            // 2. Selectors
+            const allKeys = document.querySelectorAll('.key');
+            const allMarkers = document.querySelectorAll('.note-marker');
+            const elements = [...allKeys, ...allMarkers];
+
+            elements.forEach(el => {
+                const elMidi = parseInt(el.dataset.midi);
+                const elNote = el.dataset.note;
+
+                const isExactMatch = elMidi === targetMidi;
+                const isNameMatch = elNote === targetNoteName;
+
+                // Logic based on toggle
+                if (state.matchExactOctave) {
+                    if (isExactMatch) {
+                        el.classList.add('active-exact');
+                    } else if (isNameMatch) {
+                        el.classList.add('active-note'); 
+                    }
+                } else {
+                    // Default mode: Highlight all note names, but distinguish exact octave
+                    if (isNameMatch) {
+                        if (isExactMatch) {
+                            el.classList.add('active-exact'); // Distinguish the source octave
+                        } else {
+                            el.classList.add('active-note');
+                        }
+                    }
+                }
+            });
+        }
+
+        function clearAll() {
+            state.selectedNote = null;
+            document.querySelectorAll('.active-note, .active-exact').forEach(el => {
+                el.classList.remove('active-note', 'active-exact');
+            });
+        }
+
+        // --- EVENT LISTENERS ---
+
+        document.getElementById('octaveToggle').addEventListener('change', (e) => {
+            state.matchExactOctave = e.target.checked;
+            if (state.selectedNote) {
+                highlightNote(state.selectedNote.noteName, state.selectedNote.midi);
+            }
+        });
+
+        // Tuning Handlers
+        const setupTuningHandler = (id, instrument) => {
+            document.getElementById(id).addEventListener('change', (e) => {
+                const presetKey = e.target.value;
+                const newTuning = TUNING_PRESETS[instrument][presetKey];
+                
+                // Copy array to avoid reference issues
+                state.instruments[instrument].tuning = [...newTuning];
+                
+                // Re-render that instrument
+                renderFretboard(instrument);
+                
+                // Re-apply highlight if needed
+                if (state.selectedNote) {
+                    highlightNote(state.selectedNote.noteName, state.selectedNote.midi);
+                }
+            });
+        };
+
+        setupTuningHandler('guitar-preset', 'guitar');
+        setupTuningHandler('bass-preset', 'bass');
+        setupTuningHandler('uke-preset', 'uke');
+
+        // Initial Render
+        renderAll();
+
+        // Scroll Piano to Middle C
+        setTimeout(() => {
+            const c4 = document.querySelector('.key[data-midi="60"]');
+            if (c4) {
+                const container = document.getElementById('piano-wrapper');
+                container.scrollLeft = c4.offsetLeft - container.offsetWidth / 2 + 20;
+            }
+        }, 100);
+
+    </script>
+</body>
+</html>
