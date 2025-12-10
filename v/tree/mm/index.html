@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mitral Prolapse Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #f8f9fa;
+            --text-color: #212529;
+            --sidebar-bg: #ffffff;
+            --sidebar-text: #212529;
+            --input-bg: #f1f3f5;
+            --input-border: #ced4da;
+            --node-stroke: #adb5bd;
+            --node-hover: #d90429;
+            --link-stroke: #adb5bd;
+            --accent: #ef233c;
+            --node-text: #ffffff;
+            --shadow: rgba(0,0,0,0.1);
+        }
+
+        body.dark-mode {
+            --bg-color: #1e1e24;
+            --text-color: #ffffff;
+            --sidebar-bg: #2b2d42;
+            --sidebar-text: #ffffff;
+            --input-bg: #151519;
+            --input-border: #454955;
+            --node-stroke: #8d99ae;
+            --node-hover: #ef233c;
+            --link-stroke: #454955;
+            --accent: #ef233c;
+            --node-text: #edf2f4;
+            --shadow: rgba(0,0,0,0.5);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        #sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 400px;
+            height: 100vh;
+            background-color: var(--sidebar-bg);
+            color: var(--sidebar-text);
+            box-shadow: 2px 0 10px var(--shadow);
+            z-index: 1000;
+            transform: translateX(0);
+            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background-color 0.3s;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+        }
+
+        #sidebar.collapsed {
+            transform: translateX(-400px);
+        }
+
+        #sidebar-content {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #sidebar-toggle {
+            position: absolute;
+            right: -40px;
+            top: 20px;
+            width: 40px;
+            height: 40px;
+            background-color: var(--accent);
+            border: none;
+            border-radius: 0 4px 4px 0;
+            cursor: pointer;
+            color: white;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            outline: none;
+            z-index: 1001;
+        }
+
+        h2 {
+            margin-top: 0;
+            color: var(--accent);
+        }
+        
+        .control-section {
+            border-top: 1px solid var(--input-border);
+            padding-top: 15px;
+            margin-top: 10px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .control-group label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .control-group input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+        
+        select {
+            width: 100%;
+            padding: 8px;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border: 1px solid var(--input-border);
+            border-radius: 4px;
+            margin-top: 5px;
+            outline: none;
+        }
+
+        .radio-group label {
+            margin-right: 15px;
+            cursor: pointer;
+            display: inline-block;
+        }
+        
+        .radio-group input[type="radio"] {
+            accent-color: var(--accent);
+            margin-right: 5px;
+        }
+
+        #input-area {
+            flex-grow: 1;
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+            min-height: 200px;
+        }
+
+        textarea {
+            flex-grow: 1;
+            background-color: var(--input-bg);
+            color: var(--text-color);
+            border: 1px solid var(--input-border);
+            padding: 10px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            resize: none;
+            border-radius: 4px;
+            outline: none;
+            white-space: pre;
+            overflow-wrap: normal;
+            overflow-x: scroll;
+        }
+
+        textarea:focus {
+            border-color: var(--accent);
+        }
+
+        #status-msg {
+            height: 30px;
+            color: var(--accent);
+            font-size: 13px;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+        }
+
+        #status-msg.success {
+            color: #10b981; /* Greenish */
+        }
+
+        button.action-btn {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        button.action-btn:hover {
+            opacity: 0.9;
+        }
+        
+        .hint-text {
+            font-size: 0.85em;
+            color: var(--text-color);
+            opacity: 0.6;
+            margin-top: 5px;
+            font-style: italic;
+        }
+        #tree-container {
+            width: 100vw;
+            height: 100vh;
+        }
+
+        .node rect {
+            stroke: var(--node-stroke);
+            stroke-width: 1.5px;
+            rx: 6;
+            ry: 6;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .node rect:hover {
+            stroke: var(--node-hover);
+            stroke-width: 2px;
+        }
+
+        .node text {
+            fill: var(--node-text); 
+            pointer-events: none;
+            font-family: sans-serif;
+            text-shadow: 0px 0px 3px rgba(0,0,0,0.3); 
+        }
+
+        .node path.arrow {
+            fill: var(--node-text);
+            stroke: none;
+            pointer-events: none;
+            transition: transform 0.3s ease;
+        }
+
+        .link {
+            fill: none;
+            stroke: var(--link-stroke);
+            stroke-width: 1.5px;
+        }
+        #context-menu {
+            position: absolute;
+            display: none;
+            background: var(--sidebar-bg);
+            border: 1px solid var(--input-border);
+            box-shadow: 0 4px 6px var(--shadow);
+            border-radius: 4px;
+            z-index: 2000;
+            padding: 5px 0;
+            min-width: 150px;
+        }
+
+        #context-menu div {
+            padding: 8px 15px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-color);
+        }
+
+        #context-menu div:hover {
+            background-color: var(--accent);
+            color: white;
+        }
+
+    </style>
+</head>
+<body>
+
+<!-- Context Menu -->
+<div id="context-menu">
+    <div id="cm-add">Add Child</div>
+    <div id="cm-edit">Edit Text</div>
+    <div id="cm-delete">Delete Node</div>
+</div>
+
+<!-- Sidebar -->
+<div id="sidebar">
+    <button id="sidebar-toggle" onclick="toggleSidebar()">&#9776;</button>
+    
+    <div id="sidebar-content">
+        <h2>Data Input</h2>
+        <p style="font-size: 0.9em; opacity: 0.7; margin-bottom: 10px;">
+            Paste Python dict. Double-click nodes to edit. Right-click for menu.
+        </p>
+        
+        <div class="control-group radio-group">
+            <span style="display:block; margin-bottom: 5px;">Initial State:</span>
+            <label>
+                <input type="radio" name="initialState" value="collapsed" checked> Collapsed
+            </label>
+            <label>
+                <input type="radio" name="initialState" value="expanded"> Expanded
+            </label>
+        </div>
+
+        <div id="input-area">
+            <textarea id="data-input" placeholder="{'name': 'Root', 'children': [...]}"></textarea>
+        </div>
+        
+        <div class="hint-text">Undo: Ctrl+Z | Redo: Ctrl+Y</div>
+        <div id="status-msg"></div>
+        <button class="action-btn" onclick="triggerVisualization()">Visualize Tree</button>
+
+        <!-- Visual Controls -->
+        <div class="control-section">
+            <h3 style="color: var(--accent); font-size: 16px; margin-top: 0;">Visual Settings</h3>
+            
+            <div class="control-group">
+                <label>Theme Mode</label>
+                <div class="radio-group">
+                    <label><input type="radio" name="theme" value="light" checked onchange="toggleTheme('light')"> Light</label>
+                    <label><input type="radio" name="theme" value="dark" onchange="toggleTheme('dark')"> Dark</label>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Color Palette</label>
+                <select id="palette-select" onchange="updateSettings()">
+                    <option value="standard">Standard (Default)</option>
+                    <option value="professional">Professional (Blue/Grey)</option>
+                    <option value="earth">Earth (Green/Brown)</option>
+                    <option value="cool">Cool (Purple/Cyan)</option>
+                    <option value="warm">Warm (Red/Orange)</option>
+                    <option value="pastel">Pastel (Soft)</option>
+                    <option value="neon">Neon (Dark Mode Best)</option>
+                    <option value="monochrome">Monochrome</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Vertical Spacing: <span id="v-spacing-val">100</span>px</label>
+                <input type="range" id="v-spacing-slider" min="40" max="200" value="100" oninput="updateSettings()">
+            </div>
+
+            <div class="control-group">
+                <label>Wrap Width: <span id="wrap-width-val">250</span>px</label>
+                <input type="range" id="wrap-width-slider" min="100" max="600" value="250" oninput="updateSettings()">
+            </div>
+
+            <div class="control-group">
+                <label>Font Size: <span id="font-size-val">12</span>px</label>
+                <input type="range" id="font-size-slider" min="10" max="24" value="12" oninput="updateSettings()">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tree Container -->
+<div id="tree-container"></div>
+
+<script>
+    let root;
+    let i = 0;
+    const duration = 500;
+    let selectedNode = null; 
+    let historyStack = [];
+    let redoStack = [];
+    let verticalSpacing = 100;
+    let currentFontSize = 12;
+    let currentWrapWidth = 250;
+    let currentPalette = "standard";
+    const palettes = {
+        standard: ["#2b2d42", "#ef233c", "#264653", "#e76f51", "#2a9d8f", "#8d99ae", "#1b263b", "#d62828"],
+        professional: ["#3a506b", "#5bc0be", "#0b132b", "#1c2541", "#6fffe9", "#283d3b", "#197278", "#c44536"],
+        earth: ["#588157", "#3a5a40", "#344e41", "#a3b18a", "#bc6c25", "#dda15e", "#606c38", "#283618"],
+        cool: ["#7209b7", "#3f37c9", "#4361ee", "#4895ef", "#4cc9f0", "#560bad", "#b5179e", "#f72585"],
+        warm: ["#d00000", "#ffba08", "#faa307", "#f48c06", "#e85d04", "#dc2f02", "#9d0208", "#6a040f"],
+        pastel: ["#e07a5f", "#3d405b", "#81b29a", "#f2cc8f", "#778da9", "#415a77", "#a8dadc", "#457b9d"], // Darkened slightly for white text contrast
+        neon: ["#ff006e", "#8338ec", "#3a86ff", "#fb5607", "#ffbe0b", "#06d6a0", "#ff006e", "#8338ec"],
+        monochrome: ["#343a40", "#495057", "#6c757d", "#adb5bd", "#495057", "#343a40", "#212529", "#000000"]
+    };
+    const container = document.getElementById('tree-container');
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    const svg = d3.select("#tree-container").append("svg")
+        .attr("width", width)
+        .attr("height", height)
+        .call(d3.zoom().on("zoom", (event) => {
+            g.attr("transform", event.transform);
+        }))
+        .on("click", hideContextMenu) 
+        .append("g")
+        .attr("transform", "translate(100, " + height / 2 + ")");
+
+    const g = svg.append("g");
+    let depthStep = 320; 
+    let treeMap = d3.tree().nodeSize([verticalSpacing, depthStep]); 
+
+    function toggleSidebar() {
+        const sb = document.getElementById('sidebar');
+        sb.classList.toggle('collapsed');
+    }
+
+    function toggleTheme(mode) {
+        if (mode === 'dark') {
+            document.body.classList.add('dark-mode');
+        } else {
+            document.body.classList.remove('dark-mode');
+        }
+    }
+
+    function updateSettings() {
+        verticalSpacing = parseInt(document.getElementById('v-spacing-slider').value);
+        currentFontSize = parseInt(document.getElementById('font-size-slider').value);
+        currentWrapWidth = parseInt(document.getElementById('wrap-width-slider').value);
+        currentPalette = document.getElementById('palette-select').value;
+        document.getElementById('v-spacing-val').textContent = verticalSpacing;
+        document.getElementById('font-size-val').textContent = currentFontSize;
+        document.getElementById('wrap-width-val').textContent = currentWrapWidth;
+
+        if (root) {
+            treeMap.nodeSize([verticalSpacing, depthStep]);
+            update(root);
+        }
+    }
+    
+    function saveState() {
+        const currentData = document.getElementById('data-input').value;
+        if (historyStack.length > 0 && historyStack[historyStack.length - 1] === currentData) {
+            return;
+        }
+        historyStack.push(currentData);
+        if (historyStack.length > 50) historyStack.shift();
+        redoStack = []; 
+    }
+
+    function undo() {
+        if (historyStack.length === 0) return;
+        
+        const currentData = document.getElementById('data-input').value;
+        redoStack.push(currentData);
+        
+        const previousData = historyStack.pop();
+        document.getElementById('data-input').value = previousData;
+        
+        visualize(previousData, false); // false = don't save state again
+        showStatus("Undo", "#ef233c");
+    }
+
+    function redo() {
+        if (redoStack.length === 0) return;
+        
+        const currentData = document.getElementById('data-input').value;
+        historyStack.push(currentData);
+        
+        const nextData = redoStack.pop();
+        document.getElementById('data-input').value = nextData;
+        
+        visualize(nextData, false);
+        showStatus("Redo", "#ef233c");
+    }
+    document.addEventListener('keydown', function(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+            e.preventDefault();
+            if (e.shiftKey) {
+                redo();
+            } else {
+                undo();
+            }
+        } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+            e.preventDefault();
+            redo();
+        }
+    });
+
+    function triggerVisualization() {
+        const input = document.getElementById('data-input').value;
+        if (!input.trim()) return;
+        saveState(); 
+        visualize(input, true);
+    }
+
+    function visualize(inputString, applyInitialCollapse) {
+        const status = document.getElementById('status-msg');
+        
+        if (!inputString) {
+             inputString = document.getElementById('data-input').value;
+        }
+
+        if (!inputString.trim()) {
+            status.textContent = "Error: Input is empty.";
+            status.className = "";
+            return;
+        }
+
+        try {
+            let processedInput = inputString
+                .replace(/\bNone\b/g, 'null')
+                .replace(/\bTrue\b/g, 'true')
+                .replace(/\bFalse\b/g, 'false');
+
+            const dataObj = (new Function("return " + processedInput))();
+
+            root = null;
+            i = 0;
+            
+            root = d3.hierarchy(dataObj, function(d) { return d.children; });
+            root.x0 = height / 2;
+            root.y0 = 0;
+
+            if (applyInitialCollapse) {
+                const initialState = document.querySelector('input[name="initialState"]:checked').value;
+                if (initialState === 'collapsed' && root.children) {
+                    root.children.forEach(collapseLevel1);
+                }
+            }
+
+            update(root);
+
+            showStatus("Success! Tree generated.", "#4cc9f0");
+            if(applyInitialCollapse) {
+                 document.getElementById('sidebar').classList.add('collapsed');
+            }
+
+        } catch (e) {
+            console.error(e);
+            status.textContent = "Syntax Error: " + e.message;
+            status.style.color = "#ef233c";
+        }
+    }
+    
+    function showStatus(msg, color) {
+        const status = document.getElementById('status-msg');
+        status.textContent = msg;
+        status.style.color = color || "var(--accent)";
+        setTimeout(() => { status.textContent = ""; }, 3000);
+    }
+    function syncInputFromTree() {
+        if (!root) return;
+        
+        function hierarchyToObject(d) {
+            const obj = { name: d.data.name };
+            const allChildren = (d.children || []).concat(d._children || []);
+            
+            if (allChildren.length > 0) {
+                obj.children = allChildren.map(hierarchyToObject);
+            }
+            return obj;
+        }
+
+        const newObj = hierarchyToObject(root);
+        
+        let jsonStr = JSON.stringify(newObj, null, 2);
+        let pyStr = jsonStr
+            .replace(/null/g, 'None')
+            .replace(/true/g, 'True')
+            .replace(/false/g, 'False');
+            
+        document.getElementById('data-input').value = pyStr;
+    }
+
+    function editNodeText(d) {
+        const newText = prompt("Edit node text:", d.data.name);
+        if (newText !== null && newText !== "") {
+            saveState(); // Save before modifying
+            d.data.name = newText;
+            update(d);
+            syncInputFromTree();
+        }
+    }
+
+    function addChildNode(d) {
+        saveState(); // Save before modifying
+        
+        if (!d.children && !d._children) {
+            d.children = [];
+        }
+        
+        if (d._children) {
+            d.children = d._children;
+            d._children = null;
+        }
+
+        const newNode = { name: "New Node" };
+        const newHierarchyNode = d3.hierarchy(newNode);
+        newHierarchyNode.depth = d.depth + 1;
+        newHierarchyNode.parent = d;
+        
+        if (!d.children) d.children = [];
+        d.children.push(newHierarchyNode);
+        
+        update(d);
+        syncInputFromTree();
+    }
+
+    function deleteNode(d) {
+        if (!d.parent) {
+            alert("Cannot delete root node.");
+            return;
+        }
+        
+        saveState(); // Save before modifying
+        
+        const parent = d.parent;
+        const childrenArr = parent.children || parent._children;
+        
+        const index = childrenArr.indexOf(d);
+        if (index > -1) {
+            childrenArr.splice(index, 1);
+        }
+        
+        if (childrenArr.length === 0) {
+            if (parent.children) parent.children = null;
+            if (parent._children) parent._children = null;
+        }
+
+        update(parent);
+        syncInputFromTree();
+    }
+    const contextMenu = document.getElementById('context-menu');
+    
+    document.getElementById('cm-add').onclick = () => { if(selectedNode) addChildNode(selectedNode); hideContextMenu(); };
+    document.getElementById('cm-edit').onclick = () => { if(selectedNode) editNodeText(selectedNode); hideContextMenu(); };
+    document.getElementById('cm-delete').onclick = () => { if(selectedNode) deleteNode(selectedNode); hideContextMenu(); };
+
+    function showContextMenu(event, d) {
+        event.preventDefault();
+        selectedNode = d;
+        
+        contextMenu.style.display = 'block';
+        contextMenu.style.left = event.pageX + 'px';
+        contextMenu.style.top = event.pageY + 'px';
+    }
+
+    function hideContextMenu() {
+        contextMenu.style.display = 'none';
+    }
+    function update(source) {
+        const treeData = treeMap(root);
+        const nodes = treeData.descendants();
+        const links = treeData.links();
+        nodes.forEach(function(d){ d.y = d.depth * depthStep; }); 
+        const node = g.selectAll('g.node')
+            .data(nodes, function(d) {return d.id || (d.id = ++i); });
+
+        const nodeEnter = node.enter().append('g')
+            .attr('class', 'node')
+            .attr("transform", function(d) {
+                return "translate(" + source.y0 + "," + source.x0 + ")";
+            })
+            .on('click', click)
+            .on('dblclick', (e, d) => { e.stopPropagation(); editNodeText(d); })
+            .on('contextmenu', showContextMenu);
+        nodeEnter.append('rect')
+            .attr('class', 'node-rect')
+            .attr('rx', 6)
+            .attr('ry', 6)
+            .attr('x', 0) 
+            .attr('y', -15);
+        const text = nodeEnter.append('text')
+            .attr("dy", "0.35em")
+            .attr("x", 10)
+            .attr("text-anchor", "start")
+            .text(function(d) { return d.data.name; });
+        nodeEnter.append('path')
+            .attr('class', 'arrow')
+            .attr('d', 'M 0 -4 L 5 0 L 0 4')
+            .style('opacity', 0);
+        const nodeUpdate = nodeEnter.merge(node);
+        nodeUpdate.select('text')
+            .style('font-size', currentFontSize + 'px');
+        nodeUpdate.each(function(d) {
+            const thisNode = d3.select(this);
+            const thisText = thisNode.select('text');
+            
+            thisText.text(d.data.name);
+            wrap(thisText, currentWrapWidth); 
+            
+            const bbox = thisText.node().getBBox();
+            const paddedWidth = bbox.width + 35; 
+            const paddedHeight = bbox.height + 16; 
+
+            d.width = paddedWidth; 
+            d.height = paddedHeight;
+
+            thisNode.select('rect.node-rect')
+                .attr('width', paddedWidth)
+                .attr('height', paddedHeight)
+                .attr('y', -paddedHeight / 2) 
+                .style("fill", function(d) {
+                    const colors = palettes[currentPalette];
+                    return colors[d.depth % colors.length];
+                });
+                
+            thisNode.select('path.arrow')
+                .style('opacity', (d.children || d._children) ? 1 : 0)
+                .attr('transform', function() {
+                    const hasChildren = d.children || d._children;
+                    if (!hasChildren) return "scale(0)";
+                    const rotation = d.children ? 90 : 0;
+                    return `translate(${paddedWidth - 15}, 0) rotate(${rotation})`;
+                });
+        });
+
+        nodeUpdate.transition()
+            .duration(duration)
+            .attr("transform", function(d) { 
+                return "translate(" + d.y + "," + d.x + ")";
+            });
+        const nodeExit = node.exit().transition()
+            .duration(duration)
+            .attr("transform", function(d) {
+                return "translate(" + source.y + "," + source.x + ")";
+            })
+            .remove();
+
+        nodeExit.select('rect').attr('width', 1e-6).attr('height', 1e-6);
+        nodeExit.select('text').style('fill-opacity', 1e-6);
+        const link = g.selectAll('path.link')
+            .data(links, function(d) { return d.target.id; });
+
+        const linkEnter = link.enter().insert('path', "g")
+            .attr("class", "link")
+            .attr('d', function(d){
+                const o = {x: source.x0, y: source.y0};
+                return diagonal(o, o, 0); 
+            });
+
+        const linkUpdate = linkEnter.merge(link);
+
+        linkUpdate.transition()
+            .duration(duration)
+            .attr('d', function(d){ 
+                return diagonal(d.source, d.target, d.source.width); 
+            });
+
+        const linkExit = link.exit().transition()
+            .duration(duration)
+            .attr('d', function(d) {
+                const o = {x: source.x, y: source.y};
+                return diagonal(o, o, 0);
+            })
+            .remove();
+
+        nodes.forEach(function(d){
+            d.x0 = d.x;
+            d.y0 = d.y;
+        });
+
+        function diagonal(s, d, parentWidth = 0) {
+            const startX = s.y + parentWidth;
+            const startY = s.x;
+            const endX = d.y;
+            const endY = d.x;
+
+            return `M ${startX} ${startY}
+                    C ${(startX + endX) / 2} ${startY},
+                      ${(startX + endX) / 2} ${endY},
+                      ${endX} ${endY}`;
+        }
+
+        function click(event, d) {
+            hideContextMenu();
+
+            if (event.shiftKey) {
+                if (d.children) {
+                    collapseRecursive(d);
+                } else if (d._children) {
+                    expandRecursive(d);
+                }
+            } else {
+                if (d.children) {
+                    d._children = d.children;
+                    d.children = null;
+                } else {
+                    d.children = d._children;
+                    d._children = null;
+                }
+            }
+            update(d);
+        }
+
+        function wrap(text, width) {
+            text.each(function() {
+                var text = d3.select(this),
+                    words = text.text().split(/\s+/).reverse(),
+                    word,
+                    line = [],
+                    lineNumber = 0,
+                    lineHeight = 1.2,
+                    y = text.attr("y") || 0,
+                    dy = 0,
+                    tspan = text.text(null).append("tspan").attr("x", 10).attr("y", y).attr("dy", 0 + "em");
+                
+                while (word = words.pop()) {
+                    line.push(word);
+                    tspan.text(line.join(" "));
+                    if (tspan.node().getComputedTextLength() > width) {
+                        line.pop();
+                        tspan.text(line.join(" "));
+                        line = [word];
+                        tspan = text.append("tspan")
+                                    .attr("x", 10)
+                                    .attr("y", y)
+                                    .attr("dy", ++lineNumber * lineHeight + "em")
+                                    .text(word);
+                    }
+                }
+                const totalLines = lineNumber + 1;
+                text.style("transform", `translateY(-${(totalLines - 1) * 0.6}em)`);
+            });
+        }
+    }
+    function collapseLevel1(d) {
+        if(d.children) {
+            d._children = d.children;
+            d._children.forEach(collapseLevel1);
+            d.children = null;
+        }
+    }
+    
+    function expandRecursive(d) {
+        if (d._children) {
+            d.children = d._children;
+            d._children = null;
+        }
+        if (d.children) {
+            d.children.forEach(expandRecursive);
+        }
+    }
+
+    function collapseRecursive(d) {
+        if (d.children) {
+            d._children = d.children;
+            d._children.forEach(collapseRecursive);
+            d.children = null;
+        }
+    }
+
+</script>
+</body>
+</html>
