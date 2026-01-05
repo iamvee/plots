@@ -1,0 +1,1684 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Microtonal MIDI Piano (fixed layout + mapping curves)</title>
+  <style>
+    :root{
+      --bg:#f6f7fb;
+      --panel:#ffffff;
+      --fg:#111;
+      --muted:#5f6368;
+      --line:#e3e6ea;
+
+      --accent:#2b7aa3;
+      --accentSoft:rgba(43,122,163,0.16);
+      --danger:#b32727;
+      --active:#d84a4a;
+
+      --radius:12px;
+      --shadow:0 10px 26px rgba(0,0,0,0.06);
+
+      --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+
+      --whiteW:40px;
+      --whiteH:152px;
+      --blackW:24px;
+      --blackH:100px;
+
+      --pcColW: 64px;
+      --pcSliderH: 112px;
+    }
+
+    html,body{height:100%; margin:0; background:var(--bg); color:var(--fg); font-family:var(--font);}
+    .wrap{max-width:1240px; margin:16px auto; padding:0 14px;}
+    h1{font-size:14px; font-weight:700; margin:0 0 10px; color:#1f1f1f;}
+
+    .panel{border:1px solid var(--line); border-radius:var(--radius); background:var(--panel); box-shadow:var(--shadow);}
+
+    /* top controls */
+    .bar{display:flex; flex-wrap:wrap; gap:10px 12px; align-items:flex-end; padding:12px;}
+    .field{display:flex; flex-direction:column; gap:6px; min-width:110px;}
+    .field label{font-size:11px; color:var(--muted);}
+
+    select, button, input[type="number"], input[type="text"]{
+      height:34px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:0 10px;
+      background:#fff;
+      font-size:13px;
+      color:var(--fg);
+      outline:none;
+    }
+
+    button{cursor:pointer; user-select:none; font-weight:650;}
+    button.primary{background:var(--accent); color:#fff; border-color:transparent;}
+    button.danger{background:var(--danger); color:#fff; border-color:transparent;}
+    button.ghost{background:#fff;}
+    button.toggled{box-shadow:0 0 0 3px var(--accentSoft); border-color:var(--accent);}
+
+    .status{
+      flex-basis:100%;
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:9px 10px;
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.35;
+      background:#fbfcfe;
+    }
+
+    .row{display:flex; gap:12px; margin-top:12px; align-items:flex-start;}
+    .colL{flex:1; min-width:360px;}
+    .colR{width:380px; min-width:320px;}
+
+    /* ---------- Compact pitch-class faders (no wide cards) ---------- */
+    .pcPanel{padding:12px;}
+    .pcHint{font-size:12px; color:var(--muted); margin-bottom:10px;}
+
+    .pcStrip{
+      display:grid;
+      grid-template-columns: repeat(12, var(--pcColW));
+      gap:10px;
+      align-items:start;
+      overflow-x:auto;
+      padding-bottom:8px;
+      scrollbar-width:thin;
+    }
+
+    .pcCol{
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:#fff;
+      padding:8px 8px 10px;
+      position:relative;
+      user-select:none;
+      min-height: 210px;
+    }
+
+    .pcCol.selected{border-color:var(--accent); box-shadow:0 0 0 3px var(--accentSoft);}
+    .pcCol.mappingTarget{outline:2px solid var(--accent); outline-offset:2px;}
+
+    .pcTop{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      margin-bottom:6px;
+    }
+    .pcName{font-family:var(--mono); font-size:12px; font-weight:800; color:#1f1f1f;}
+    .pcCents{font-family:var(--mono); font-size:11px; color:#4f4f4f;}
+
+    .ccBadge{
+      position:absolute;
+      top:8px;
+      right:8px;
+      font-family:var(--mono);
+      font-size:10px;
+      color:#333;
+      border:1px solid var(--line);
+      border-radius:999px;
+      padding:2px 7px;
+      background:#fff;
+    }
+    .ccBadge.mapped{
+      border-color:var(--accent);
+      background:rgba(43,122,163,0.10);
+    }
+
+    .pcSliderWrap{
+      height:var(--pcSliderH);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      margin:6px 0 8px;
+    }
+
+    input.vslider{
+      -webkit-appearance:none;
+      appearance:none;
+      width: var(--pcSliderH);
+      height:16px;
+      transform: rotate(-90deg);
+      background: transparent;
+    }
+    input.vslider::-webkit-slider-runnable-track{height:6px; background:#bdbdbd; border-radius:999px;}
+    input.vslider::-webkit-slider-thumb{
+      -webkit-appearance:none;
+      appearance:none;
+      width:12px; height:12px;
+      border-radius:4px;
+      background:var(--accent);
+      border:2px solid #fff;
+      box-shadow:0 0 0 1px rgba(0,0,0,0.15);
+      margin-top:-3px;
+    }
+    input.vslider::-moz-range-track{height:6px; background:#bdbdbd; border-radius:999px;}
+    input.vslider::-moz-range-thumb{
+      width:12px; height:12px;
+      border-radius:4px;
+      background:var(--accent);
+      border:2px solid #fff;
+      box-shadow:0 0 0 1px rgba(0,0,0,0.15);
+    }
+
+    .pcBtns{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap:6px;
+    }
+    .pcBtns button{
+      height:28px;
+      border-radius:10px;
+      font-size:11px;
+      padding:0;
+      width:100%;
+      font-weight:700;
+    }
+
+    .pillRow{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
+    .pill{display:inline-block; border:1px solid var(--line); border-radius:999px; padding:5px 10px; font-size:11px; background:#fff; color:#333;}
+
+    /* ---------- Keyboard ---------- */
+    .keyboardPanel{padding:12px; overflow:auto;}
+    .keyboardWrap{border:1px solid var(--line); border-radius:14px; padding:10px; background:#fff;}
+
+    .keyboard{position:relative; width:max-content; user-select:none;}
+    .whiteRow{display:flex; gap:0;}
+
+    .key{
+      position:relative;
+      box-sizing:border-box;
+      cursor:pointer;
+      display:flex;
+      align-items:flex-end;
+      justify-content:center;
+      padding:6px;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .whiteKey{
+      width:var(--whiteW);
+      height:var(--whiteH);
+      background:#fff;
+      border:1px solid #cfcfcf;
+      border-bottom:3px solid #c2c2c2;
+      border-radius:0 0 10px 10px;
+    }
+
+    .blackLayer{position:absolute; left:0; top:0; height:var(--blackH); width:100%; pointer-events:none;}
+
+    .blackKey{
+      position:absolute;
+      top:0;
+      width:var(--blackW);
+      height:var(--blackH);
+      background:linear-gradient(#3a3a3a, #1f1f1f);
+      border:1px solid #111;
+      border-radius:0 0 10px 10px;
+      box-shadow:0 10px 18px rgba(0,0,0,0.22);
+      pointer-events:auto;
+    }
+
+    .key.active{outline:2px solid var(--active); outline-offset:-2px;}
+    .key.highlight{box-shadow:0 0 0 3px rgba(216,74,74,0.14) inset;}
+    .whiteKey.highlight{background:color-mix(in srgb, rgba(216,74,74,0.16) 34%, #fff);}
+    .blackKey.highlight{filter:brightness(1.08);}
+
+    .keyLabel{position:absolute; left:0; right:0; display:flex; justify-content:center; pointer-events:none; font-family:var(--mono);}
+    .lblName{bottom:8px; font-size:10px; color:#4d4d4d;}
+    .lblCents{top:6px; font-size:10px; color:#333; opacity:0.92;}
+    .lblMidi{bottom:22px; font-size:9px; color:#6c6c6c;}
+    .lblKbd{bottom:34px; font-size:9px; color:#7a7a7a;}
+
+    .blackKey .lblName{color:#e7e7e7; bottom:10px; font-size:10px;}
+    .blackKey .lblCents{color:#f0f0f0; opacity:0.9;}
+    .blackKey .lblMidi, .blackKey .lblKbd{color:#d0d0d0;}
+
+    /* show/hide key labels */
+    body.hideName .lblName{display:none;}
+    body.hideCents .lblCents{display:none;}
+    body.hideMidi .lblMidi{display:none;}
+    body.hideKbd .lblKbd{display:none;}
+
+    /* ---------- Right side ---------- */
+    .side{padding:12px;}
+    .side h2{font-size:12px; font-weight:800; margin:0 0 8px; color:#1f1f1f;}
+    .block{margin-top:12px;}
+    .checks{display:flex; flex-wrap:wrap; gap:10px; margin-top:8px;}
+    .checks label{display:flex; align-items:center; gap:8px; font-size:12px; color:#333; user-select:none;}
+    input[type="checkbox"]{width:16px; height:16px; accent-color:var(--accent);}
+
+    details{border:1px solid var(--line); border-radius:12px; padding:8px 10px; background:#fff;}
+    details summary{cursor:pointer; font-size:12px; color:#1f1f1f; font-weight:750; user-select:none;}
+    details .inner{margin-top:10px;}
+
+    .mappingList{font-family:var(--mono); font-size:11px; color:#555; max-height:180px; overflow:auto; border:1px solid var(--line); border-radius:12px; padding:8px; background:#fff;}
+
+    .mapSettings{
+      display:grid;
+      grid-template-columns: 1fr;
+      gap:8px;
+    }
+    .mapRow{
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:10px;
+      background:#fff;
+    }
+    .mapRowTop{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      margin-bottom:8px;
+    }
+    .mapRowTop .nm{font-family:var(--mono); font-weight:800; font-size:12px;}
+    .mapRowTop .cc{font-family:var(--mono); font-size:11px; color:#444;}
+    .mapGrid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:8px;
+      align-items:end;
+    }
+    .miniField{display:flex; flex-direction:column; gap:5px;}
+    .miniField label{font-size:11px; color:var(--muted);}
+    .miniField select, .miniField input{height:30px; border-radius:10px; font-size:12px;}
+
+    .footerNote{margin-top:10px; font-size:12px; color:var(--muted); line-height:1.35;}
+
+    @media (max-width: 980px){
+      .row{flex-direction:column;}
+      .colR{width:auto;}
+      .pcStrip{grid-template-columns: repeat(12, 62px);}
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>Microtonal MIDI Piano — compact pitch-class faders + per-mapping curves</h1>
+
+    <div class="panel bar">
+      <div class="field">
+        <label>MIDI</label>
+        <button id="btnMidi" class="primary">Enable MIDI</button>
+      </div>
+
+      <div class="field">
+        <label>Audio</label>
+        <button id="btnAudio" class="primary">Start Audio</button>
+      </div>
+
+      <div class="field">
+        <label>Oscillator</label>
+        <select id="oscType">
+          <option value="sine">sine</option>
+          <option value="triangle" selected>triangle</option>
+          <option value="sawtooth">sawtooth</option>
+          <option value="square">square</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Master gain</label>
+        <input id="gain" type="number" min="0" max="1" step="0.01" value="0.20" />
+      </div>
+
+      <div class="field">
+        <label>Tuning</label>
+        <select id="tuning">
+          <option value="12">12-TET (baseline)</option>
+          <option value="19">19-TET</option>
+          <option value="24">24-TET</option>
+          <option value="31">31-TET</option>
+          <option value="53">53-TET</option>
+          <option value="72" selected>72-TET</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>First note</label>
+        <select id="firstNote"></select>
+      </div>
+
+      <div class="field">
+        <label>Last note</label>
+        <select id="lastNote"></select>
+      </div>
+
+      <div class="field">
+        <label>Learn</label>
+        <button id="btnLearn" class="ghost">Learn CC</button>
+      </div>
+
+      <div class="field">
+        <label>Tools</label>
+        <div style="display:flex; gap:8px;">
+          <button id="btnReset" class="ghost">Reset offsets</button>
+          <button id="btnPanic" class="danger">Panic</button>
+        </div>
+      </div>
+
+      <div class="status" id="status">
+        MIDI: not enabled. Audio: not started.
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="colL">
+        <!-- Pitch-class faders -->
+        <div class="panel pcPanel">
+          <div class="pcHint" id="pcHint">
+            Click a fader to select its note name. When <b>Learn CC</b> is ON, select a fader then move a hardware knob (CC).
+          </div>
+          <div class="pcStrip" id="pcStrip"></div>
+
+          <div class="pillRow">
+            <span class="pill">CC controls are per note name (C, C#, ...) and affect all octaves</span>
+            <span class="pill">Offsets shown as signed cents vs 12-TET</span>
+          </div>
+        </div>
+
+        <!-- Keyboard -->
+        <div class="panel keyboardPanel" style="margin-top:12px;">
+          <div class="keyboardWrap">
+            <div class="keyboard" id="keyboard"></div>
+          </div>
+          <div class="footerNote">
+            Mouse/touch: press a key to play. MIDI Note On/Off supported. While holding a note, moving its pitch-class fader updates pitch in real time.
+          </div>
+        </div>
+      </div>
+
+      <div class="colR">
+        <div class="panel side">
+          <h2>Display</h2>
+          <div class="checks">
+            <label><input type="checkbox" id="ckName" checked> Note name</label>
+            <label><input type="checkbox" id="ckCents" checked> Cents</label>
+            <label><input type="checkbox" id="ckMidi"> MIDI #</label>
+            <label><input type="checkbox" id="ckKbd"> Computer keys</label>
+          </div>
+
+          <div class="block">
+            <h2>Mappings</h2>
+            <div class="mappingList" id="mappings"></div>
+          </div>
+
+          <div class="block">
+            <details open>
+              <summary>Advanced controls</summary>
+              <div class="inner">
+                <div class="miniField" style="margin-bottom:10px;">
+                  <label>Quantize (cents) — applies to faders & CC</label>
+                  <div style="display:flex; gap:8px; align-items:center;">
+                    <label style="display:flex; gap:8px; align-items:center; font-size:12px; margin:0;">
+                      <input type="checkbox" id="ckQuantize" checked>
+                      On
+                    </label>
+                    <input id="quantStep" type="number" min="1" max="100" step="1" value="25" style="width:90px; height:30px;">
+                  </div>
+                </div>
+
+                <div class="miniField">
+                  <label>Selected pitch-class mapping settings</label>
+                </div>
+
+                <div id="mapSettings" class="mapSettings"></div>
+              </div>
+            </details>
+          </div>
+
+          <div class="block">
+            <details>
+              <summary>Key coloring (saved in presets)</summary>
+              <div class="inner">
+                <div class="checks" style="margin-top:0;">
+                  <label><input type="checkbox" id="ckColor" checked> Enable</label>
+                </div>
+
+                <div class="miniField" style="margin-top:10px;">
+                  <label>Mode</label>
+                  <select id="colorMode">
+                    <option value="custom" selected>Custom per note name</option>
+                    <option value="auto">Auto by cents</option>
+                  </select>
+                </div>
+
+                <div class="miniField" style="margin-top:10px;">
+                  <label>Auto mode intensity</label>
+                  <input id="autoIntensity" type="number" min="0" max="2" step="0.1" value="1.0" style="height:30px;">
+                </div>
+
+                <div style="margin-top:10px; font-size:12px; color:var(--muted);">
+                  Tip: pick a fader (pitch class), set its color in custom mode, then save preset.
+                </div>
+
+                <div style="margin-top:10px; display:flex; gap:8px;">
+                  <button id="btnClearColors" class="ghost">Clear colors</button>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <div class="block">
+            <details>
+              <summary>Presets</summary>
+              <div class="inner">
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                  <button id="btnSavePreset" class="primary">Save preset (JSON)</button>
+                  <button id="btnLoadPreset" class="ghost">Load preset (JSON)</button>
+                  <input id="filePreset" type="file" accept="application/json" style="display:none;">
+                </div>
+              </div>
+            </details>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // -----------------------------
+  // Notes / helpers
+  // -----------------------------
+  const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+  const isBlackPC = (pc) => NOTE_NAMES[pc].includes("#");
+
+  function midiToName(midi){
+    const name = NOTE_NAMES[midi % 12];
+    const oct = Math.floor(midi / 12) - 1;
+    return name + oct;
+  }
+  function nameToMidi(name){
+    const m = name.match(/^([A-G])(#?)(-?\d)$/);
+    if(!m) return null;
+    const pc = NOTE_NAMES.indexOf(m[1] + (m[2] ? "#" : ""));
+    const oct = parseInt(m[3], 10);
+    return (oct + 1) * 12 + pc;
+  }
+  function fmtSignedCents(x){
+    const v = Math.round(x);
+    return (v >= 0 ? "+" : "") + v;
+  }
+  function clamp(x,a,b){ return Math.max(a, Math.min(b, x)); }
+
+  function smoothstep(t){ return t*t*(3 - 2*t); } // S-curve
+
+  // -----------------------------
+  // State (localStorage)
+  // -----------------------------
+  const LS_KEY = "microtonal_piano_pc_v2";
+  const DEFAULT_FIRST = nameToMidi("G2");
+  const DEFAULT_LAST  = nameToMidi("F5");
+
+  // Mapping config per pitch class
+  function defaultMapCfg(){
+    return {
+      minCents: -100,
+      maxCents:  100,
+      curve: "linear", // linear | log | exp | s
+      invert: false
+    };
+  }
+
+  const state = {
+    midiEnabled:false,
+    audioEnabled:false,
+
+    tuningN:72,
+    firstMidi:DEFAULT_FIRST,
+    lastMidi:DEFAULT_LAST,
+
+    // pitch-class cents offsets: pc -> cents
+    pcCents: new Array(12).fill(0),
+
+    // mapping: pc -> {channel, cc} and reverse: "ch:cc" -> pc
+    ccByPC: new Array(12).fill(null),
+    pcByCC: new Map(),
+
+    // per-pitch-class mapping config
+    mapCfg: new Array(12).fill(null).map(() => defaultMapCfg()),
+
+    // selection / learn
+    selectedPC: 0,
+    learnOn: false,
+    learnTargetPC: null,
+
+    // quantization
+    quantizeOn: true,
+    quantStep: 25,
+
+    // key labels
+    showName: true,
+    showCents: true,
+    showMidi: false,
+    showKbd: false,
+
+    // coloring
+    colorOn: true,
+    colorMode: "custom", // custom | auto
+    autoIntensity: 1.0,
+    pcColors: new Array(12).fill(null), // css color per pc
+  };
+
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(LS_KEY);
+      if(!raw) return;
+      const obj = JSON.parse(raw);
+
+      if(typeof obj.tuningN === "number") state.tuningN = obj.tuningN;
+      if(typeof obj.firstMidi === "number") state.firstMidi = obj.firstMidi;
+      if(typeof obj.lastMidi === "number") state.lastMidi = obj.lastMidi;
+
+      if(Array.isArray(obj.pcCents) && obj.pcCents.length === 12) state.pcCents = obj.pcCents.map(Number);
+
+      // mappings
+      state.ccByPC = new Array(12).fill(null);
+      state.pcByCC = new Map();
+      if(Array.isArray(obj.ccByPC) && obj.ccByPC.length === 12){
+        obj.ccByPC.forEach((m, pc) => {
+          if(m && typeof m.cc === "number" && typeof m.channel === "number"){
+            state.ccByPC[pc] = { cc: Number(m.cc), channel: Number(m.channel) };
+            state.pcByCC.set(`${Number(m.channel)}:${Number(m.cc)}`, pc);
+          }
+        });
+      }
+
+      // map configs
+      if(Array.isArray(obj.mapCfg) && obj.mapCfg.length === 12){
+        state.mapCfg = obj.mapCfg.map((c) => ({
+          minCents: Number(c?.minCents ?? -100),
+          maxCents: Number(c?.maxCents ??  100),
+          curve: String(c?.curve ?? "linear"),
+          invert: !!c?.invert
+        }));
+      }
+
+      // quant
+      state.quantizeOn = !!obj.quantizeOn;
+      state.quantStep = Number(obj.quantStep ?? 25);
+
+      // labels
+      state.showName = !!obj.showName;
+      state.showCents = !!obj.showCents;
+      state.showMidi = !!obj.showMidi;
+      state.showKbd = !!obj.showKbd;
+
+      // coloring
+      state.colorOn = !!obj.colorOn;
+      state.colorMode = String(obj.colorMode ?? "custom");
+      state.autoIntensity = Number(obj.autoIntensity ?? 1.0);
+      if(Array.isArray(obj.pcColors) && obj.pcColors.length === 12) state.pcColors = obj.pcColors.map(v => v ? String(v) : null);
+
+      if(typeof obj.selectedPC === "number") state.selectedPC = clamp(obj.selectedPC|0, 0, 11);
+    }catch(e){
+      console.warn("loadState failed:", e);
+    }
+  }
+
+  function saveState(){
+    const obj = {
+      tuningN: state.tuningN,
+      firstMidi: state.firstMidi,
+      lastMidi: state.lastMidi,
+
+      pcCents: state.pcCents,
+
+      ccByPC: state.ccByPC,
+      mapCfg: state.mapCfg,
+
+      quantizeOn: state.quantizeOn,
+      quantStep: state.quantStep,
+
+      showName: state.showName,
+      showCents: state.showCents,
+      showMidi: state.showMidi,
+      showKbd: state.showKbd,
+
+      colorOn: state.colorOn,
+      colorMode: state.colorMode,
+      autoIntensity: state.autoIntensity,
+      pcColors: state.pcColors,
+
+      selectedPC: state.selectedPC
+    };
+    localStorage.setItem(LS_KEY, JSON.stringify(obj));
+  }
+
+  // -----------------------------
+  // Tuning mapping (N-TET -> pitch class offsets)
+  // -----------------------------
+  function pitchClassOffsetsForNTET(N){
+    const off = new Array(12).fill(0);
+    for(let s=0; s<12; s++){
+      const k = Math.round(s * N / 12);
+      const centsNTET = 1200 * (k / N);
+      const cents12   = 100 * s;
+      off[s] = centsNTET - cents12;
+    }
+    return off;
+  }
+
+  function applyTuning(N){
+    state.tuningN = Number(N);
+    const pcOff = pitchClassOffsetsForNTET(state.tuningN);
+    for(let pc=0; pc<12; pc++) state.pcCents[pc] = pcOff[pc];
+    saveState();
+    renderAll();
+    setStatus();
+  }
+
+  // -----------------------------
+  // Quantize
+  // -----------------------------
+  function quantizeCents(v){
+    if(!state.quantizeOn) return v;
+    const step = Math.max(1, Math.round(state.quantStep || 25));
+    return Math.round(v / step) * step;
+  }
+
+  // -----------------------------
+  // Mapping curves: CC(0..127) -> cents in [min..max]
+  // -----------------------------
+  function ccToCents(value0_127, cfg){
+    let t = clamp(value0_127 / 127, 0, 1);
+    if(cfg.invert) t = 1 - t;
+
+    switch(cfg.curve){
+      case "exp": t = t*t; break;            // more resolution near min
+      case "log": t = Math.sqrt(t); break;   // more resolution near max
+      case "s":   t = smoothstep(t); break;  // smooth S
+      default:    /* linear */ break;
+    }
+
+    const minC = Number(cfg.minCents ?? -100);
+    const maxC = Number(cfg.maxCents ??  100);
+    const cents = minC + t * (maxC - minC);
+    return quantizeCents(cents);
+  }
+
+  // -----------------------------
+  // Audio engine
+  // -----------------------------
+  let audioCtx=null;
+  let masterGain=null;
+
+  // active notes: midi -> {osc, gain}
+  const active = new Map();
+
+  function midiToFreq(midi, centsOffset){
+    const base = 440 * Math.pow(2, (midi - 69) / 12);
+    return base * Math.pow(2, (centsOffset || 0) / 1200);
+  }
+
+  function startAudio(){
+    if(audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = clamp(Number(gainEl.value || 0.2), 0, 1);
+    masterGain.connect(audioCtx.destination);
+    state.audioEnabled = true;
+  }
+
+  function getMidiCents(midi){
+    const pc = midi % 12;
+    return Number(state.pcCents[pc] ?? 0);
+  }
+
+  function retuneActiveForPC(pc){
+    if(!audioCtx) return;
+    const cents = Number(state.pcCents[pc] ?? 0);
+    const now = audioCtx.currentTime;
+    for(const [m, node] of active.entries()){
+      if((m % 12) === pc){
+        node.osc.frequency.setValueAtTime(midiToFreq(m, cents), now);
+      }
+    }
+  }
+
+  function playNote(midi, velocity=100){
+    if(!audioCtx) return;
+    if(active.has(midi)) return;
+
+    const cents = getMidiCents(midi);
+    const freq = midiToFreq(midi, cents);
+
+    const osc = audioCtx.createOscillator();
+    osc.type = oscTypeEl.value || "triangle";
+    osc.frequency.value = freq;
+
+    const g = audioCtx.createGain();
+    const v = clamp(velocity/127, 0, 1);
+    const target = Math.max(0.0002, v * 0.28);
+
+    const now = audioCtx.currentTime;
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(target, now + 0.012);
+
+    osc.connect(g);
+    g.connect(masterGain);
+    osc.start();
+
+    active.set(midi, { osc, gain: g });
+    markKeyActive(midi, true);
+  }
+
+  function stopNote(midi){
+    if(!audioCtx) return;
+    const node = active.get(midi);
+    if(!node) return;
+
+    const now = audioCtx.currentTime;
+    node.gain.gain.cancelScheduledValues(now);
+    node.gain.gain.setValueAtTime(Math.max(0.0002, node.gain.gain.value), now);
+    node.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+    node.osc.stop(now + 0.10);
+
+    active.delete(midi);
+    markKeyActive(midi, false);
+  }
+
+  function panic(){
+    for(const m of Array.from(active.keys())) stopNote(m);
+  }
+
+  // -----------------------------
+  // MIDI
+  // -----------------------------
+  const statusEl = document.getElementById("status");
+
+  function setStatus(extra=""){
+    const midiTxt = state.midiEnabled ? "enabled" : "not enabled";
+    const audTxt  = state.audioEnabled ? "started" : "not started";
+    const learnTxt = state.learnOn ? "ON" : "OFF";
+    const qTxt = state.quantizeOn ? `ON (${state.quantStep}c)` : "OFF";
+
+    statusEl.innerHTML =
+      `MIDI: ${midiTxt}. Audio: ${audTxt}. Learn CC: ${learnTxt}. Quantize: ${qTxt}.<br/>` +
+      `Tuning: ${state.tuningN}-TET (signed cents vs 12-TET). Selected: ${NOTE_NAMES[state.selectedPC]}.` +
+      (extra ? `<br/>${extra}` : "");
+  }
+
+  let midiAccess=null;
+
+  function enableMIDI(){
+    if(!navigator.requestMIDIAccess){
+      setStatus("WebMIDI not supported in this browser.");
+      return;
+    }
+    navigator.requestMIDIAccess({ sysex:false }).then((access) => {
+      midiAccess = access;
+      state.midiEnabled = true;
+
+      const hookInputs = () => {
+        for(const input of access.inputs.values()){
+          input.onmidimessage = onMIDIMessage;
+        }
+      };
+      hookInputs();
+      access.onstatechange = hookInputs;
+      setStatus(`Inputs: ${access.inputs.size}, Outputs: ${access.outputs.size}`);
+    }).catch((err) => setStatus("MIDI access denied: " + err));
+  }
+
+  function assignCCToPC(pc, channel, cc){
+    // remove any existing reverse mapping for this pc
+    const prev = state.ccByPC[pc];
+    if(prev) state.pcByCC.delete(`${prev.channel}:${prev.cc}`);
+
+    // if that CC is already mapped to another pc, clear it
+    const key = `${channel}:${cc}`;
+    const prevPC = state.pcByCC.get(key);
+    if(prevPC !== undefined && prevPC !== pc){
+      state.ccByPC[prevPC] = null;
+    }
+
+    state.ccByPC[pc] = { channel, cc };
+    state.pcByCC.set(key, pc);
+  }
+
+  function onMIDIMessage(ev){
+    const [status, d1, d2] = ev.data;
+    const type = status & 0xF0;
+    const ch   = status & 0x0F;
+
+    if(type === 0x90){ // note on
+      const midi = d1, vel = d2;
+      if(vel > 0) playNote(midi, vel);
+      else stopNote(midi);
+      return;
+    }
+    if(type === 0x80){ // note off
+      stopNote(d1);
+      return;
+    }
+    if(type === 0xB0){ // CC
+      const cc = d1, value = d2;
+
+      // learn
+      if(state.learnOn && state.learnTargetPC !== null){
+        const pc = state.learnTargetPC;
+        assignCCToPC(pc, ch, cc);
+        state.learnTargetPC = null;
+        saveState();
+        renderFaders();
+        renderMappings();
+        renderMapSettings();
+        setStatus(`Mapped CC ${cc} (ch ${ch+1}) → ${NOTE_NAMES[pc]} (all octaves)`);
+        return;
+      }
+
+      const key = `${ch}:${cc}`;
+      const pc = state.pcByCC.get(key);
+      if(pc !== undefined){
+        const cfg = state.mapCfg[pc] || defaultMapCfg();
+        const cents = ccToCents(value, cfg);
+        state.pcCents[pc] = cents;
+        saveState();
+        updateFaderUI(pc);
+        updateKeysForPC(pc);
+        retuneActiveForPC(pc);
+      }
+    }
+  }
+
+  // -----------------------------
+  // UI render
+  // -----------------------------
+  const pcStripEl = document.getElementById("pcStrip");
+  const mappingsEl = document.getElementById("mappings");
+  const keyboardEl = document.getElementById("keyboard");
+  const mapSettingsEl = document.getElementById("mapSettings");
+
+  // computer keyboard mapping (optional)
+  const KBD_KEYS = [
+    "z","x","c","v","b","n","m",",",".","/",
+    "q","w","e","r","t","y","u","i","o","p","[","]","\\",
+    "a","s","d","f","g","h","j","k","l",";","'"
+  ];
+
+  function markKeyActive(midi, on){
+    const el = keyboardEl.querySelector(`.key[data-midi="${midi}"]`);
+    if(el) el.classList.toggle("active", !!on);
+  }
+
+  function setBodyLabelToggles(){
+    document.body.classList.toggle("hideName", !state.showName);
+    document.body.classList.toggle("hideCents", !state.showCents);
+    document.body.classList.toggle("hideMidi", !state.showMidi);
+    document.body.classList.toggle("hideKbd", !state.showKbd);
+  }
+
+  function selectPC(pc){
+    state.selectedPC = pc;
+    // when learn ON, selected fader becomes learn target
+    state.learnTargetPC = state.learnOn ? pc : null;
+    saveState();
+    renderFaders();
+    renderMapSettings();
+    highlightKeysForSelectedPC();
+    setStatus();
+  }
+
+  function updateFaderUI(pc){
+    const col = pcStripEl.querySelector(`.pcCol[data-pc="${pc}"]`);
+    if(!col) return;
+
+    const cents = Number(state.pcCents[pc] ?? 0);
+    const centsEl = col.querySelector(`.pcCents`);
+    const slider = col.querySelector(`input.vslider`);
+    if(centsEl) centsEl.textContent = fmtSignedCents(cents);
+    if(slider) slider.value = String(Math.round(cents));
+
+    const badge = col.querySelector(`.ccBadge`);
+    const m = state.ccByPC[pc];
+    if(badge){
+      badge.classList.toggle("mapped", !!m);
+      badge.textContent = m ? `CC${m.cc}` : "unmapped";
+      badge.title = m ? `Mapped: CC ${m.cc}, ch ${m.channel+1}` : "No CC mapping";
+    }
+  }
+
+  function renderFaders(){
+    pcStripEl.innerHTML = "";
+
+    for(let pc=0; pc<12; pc++){
+      const col = document.createElement("div");
+      col.className = "pcCol";
+      col.dataset.pc = String(pc);
+
+      if(pc === state.selectedPC) col.classList.add("selected");
+      if(state.learnOn && state.learnTargetPC === pc) col.classList.add("mappingTarget");
+
+      // CC badge
+      const badge = document.createElement("div");
+      badge.className = "ccBadge";
+      col.appendChild(badge);
+
+      const top = document.createElement("div");
+      top.className = "pcTop";
+
+      const name = document.createElement("div");
+      name.className = "pcName";
+      name.textContent = NOTE_NAMES[pc];
+      top.appendChild(name);
+
+      const cents = document.createElement("div");
+      cents.className = "pcCents";
+      cents.textContent = fmtSignedCents(state.pcCents[pc] ?? 0);
+      top.appendChild(cents);
+
+      col.appendChild(top);
+
+      const sliderWrap = document.createElement("div");
+      sliderWrap.className = "pcSliderWrap";
+
+      const slider = document.createElement("input");
+      slider.type = "range";
+      slider.className = "vslider";
+      slider.min = "-200";
+      slider.max = "200";
+      slider.step = "1";
+      slider.value = String(Math.round(state.pcCents[pc] ?? 0));
+      slider.addEventListener("pointerdown", () => selectPC(pc));
+      slider.addEventListener("input", () => {
+        selectPC(pc);
+        let v = Number(slider.value);
+        v = quantizeCents(v);
+        state.pcCents[pc] = v;
+        saveState();
+        updateFaderUI(pc);
+        updateKeysForPC(pc);
+        retuneActiveForPC(pc);
+      });
+
+      sliderWrap.appendChild(slider);
+      col.appendChild(sliderWrap);
+
+      const btns = document.createElement("div");
+      btns.className = "pcBtns";
+
+      const selBtn = document.createElement("button");
+      selBtn.className = "ghost";
+      selBtn.textContent = "Select";
+      selBtn.addEventListener("click", () => selectPC(pc));
+      btns.appendChild(selBtn);
+
+      col.appendChild(btns);
+
+      // click column to select
+      col.addEventListener("click", (e) => {
+        // avoid double-triggering on slider input
+        if(e.target === slider) return;
+        selectPC(pc);
+      });
+
+      pcStripEl.appendChild(col);
+      updateFaderUI(pc);
+    }
+  }
+
+  function renderMappings(){
+    const lines = [];
+    for(let pc=0; pc<12; pc++){
+      const m = state.ccByPC[pc];
+      if(m){
+        lines.push(`${NOTE_NAMES[pc]}  <=  CC ${m.cc}  ch ${m.channel+1}`);
+      }
+    }
+    mappingsEl.innerHTML = lines.length
+      ? lines.map(s => `<div>${s}</div>`).join("")
+      : `<div>No CC mappings yet. Turn on <b>Learn CC</b>, select a fader, then move a hardware knob.</div>`;
+  }
+
+  function renderMapSettings(){
+    mapSettingsEl.innerHTML = "";
+
+    // show only the selected PC mapping settings (your request: “each mapping should have a part in advanced”)
+    // You can change this to show all 12 by looping all pcs.
+    const pc = state.selectedPC;
+    const cfg = state.mapCfg[pc] || defaultMapCfg();
+    const m = state.ccByPC[pc];
+
+    const row = document.createElement("div");
+    row.className = "mapRow";
+
+    const top = document.createElement("div");
+    top.className = "mapRowTop";
+
+    const nm = document.createElement("div");
+    nm.className = "nm";
+    nm.textContent = `Selected: ${NOTE_NAMES[pc]}`;
+    top.appendChild(nm);
+
+    const cc = document.createElement("div");
+    cc.className = "cc";
+    cc.textContent = m ? `CC ${m.cc}  ch ${m.channel+1}` : "unmapped";
+    top.appendChild(cc);
+
+    row.appendChild(top);
+
+    const grid = document.createElement("div");
+    grid.className = "mapGrid";
+
+    const minF = document.createElement("div");
+    minF.className = "miniField";
+    minF.innerHTML = `<label>Min cents</label>`;
+    const minIn = document.createElement("input");
+    minIn.type = "number"; minIn.step="1"; minIn.value = String(cfg.minCents);
+    minIn.addEventListener("input", () => {
+      cfg.minCents = Number(minIn.value);
+      state.mapCfg[pc] = cfg;
+      saveState();
+    });
+    minF.appendChild(minIn);
+
+    const maxF = document.createElement("div");
+    maxF.className = "miniField";
+    maxF.innerHTML = `<label>Max cents</label>`;
+    const maxIn = document.createElement("input");
+    maxIn.type = "number"; maxIn.step="1"; maxIn.value = String(cfg.maxCents);
+    maxIn.addEventListener("input", () => {
+      cfg.maxCents = Number(maxIn.value);
+      state.mapCfg[pc] = cfg;
+      saveState();
+    });
+    maxF.appendChild(maxIn);
+
+    const curveF = document.createElement("div");
+    curveF.className = "miniField";
+    curveF.innerHTML = `<label>Curve</label>`;
+    const curveSel = document.createElement("select");
+    curveSel.innerHTML = `
+      <option value="linear">Linear</option>
+      <option value="log">Log (sqrt)</option>
+      <option value="exp">Exp (square)</option>
+      <option value="s">S-curve</option>
+    `;
+    curveSel.value = cfg.curve;
+    curveSel.addEventListener("change", () => {
+      cfg.curve = curveSel.value;
+      state.mapCfg[pc] = cfg;
+      saveState();
+    });
+    curveF.appendChild(curveSel);
+
+    const invF = document.createElement("div");
+    invF.className = "miniField";
+    invF.innerHTML = `<label>Invert</label>`;
+    const inv = document.createElement("select");
+    inv.innerHTML = `<option value="0">Off</option><option value="1">On</option>`;
+    inv.value = cfg.invert ? "1" : "0";
+    inv.addEventListener("change", () => {
+      cfg.invert = inv.value === "1";
+      state.mapCfg[pc] = cfg;
+      saveState();
+    });
+    invF.appendChild(inv);
+
+    grid.appendChild(minF);
+    grid.appendChild(maxF);
+    grid.appendChild(curveF);
+    grid.appendChild(invF);
+
+    row.appendChild(grid);
+
+    const note = document.createElement("div");
+    note.className = "footerNote";
+    note.style.marginTop = "8px";
+    note.textContent = "These parameters affect CC->cents mapping for this pitch class.";
+    row.appendChild(note);
+
+    mapSettingsEl.appendChild(row);
+  }
+
+  // -----------------------------
+  // Keyboard render (proper white/black layout)
+  // -----------------------------
+  function buildKeyboard(){
+    keyboardEl.innerHTML = "";
+
+    // build white keys in range, overlay black keys
+    const whites = [];
+    const blacks = [];
+
+    let whiteIndex = 0;
+
+    for(let midi=state.firstMidi; midi<=state.lastMidi; midi++){
+      const pc = midi % 12;
+      const name = midiToName(midi);
+
+      const isBlack = isBlackPC(pc);
+      if(!isBlack){
+        whites.push({ midi, pc, name, whiteIndex });
+        whiteIndex++;
+      } else {
+        blacks.push({ midi, pc, name });
+      }
+    }
+
+    // container
+    const whiteRow = document.createElement("div");
+    whiteRow.className = "whiteRow";
+
+    // place white keys
+    for(const w of whites){
+      const key = document.createElement("div");
+      key.className = "key whiteKey";
+      key.dataset.midi = String(w.midi);
+      key.dataset.pc = String(w.pc);
+
+      key.appendChild(makeKeyLabels(w.midi, w.pc));
+
+      // press-to-play
+      let down=false;
+      key.addEventListener("mousedown", (e) => { e.preventDefault(); down=true; playNote(w.midi, 110); });
+      window.addEventListener("mouseup", () => { if(down){ down=false; stopNote(w.midi); } });
+
+      // select PC on click
+      key.addEventListener("click", () => selectPC(w.pc));
+
+      whiteRow.appendChild(key);
+    }
+
+    keyboardEl.appendChild(whiteRow);
+
+    // black keys overlay layer
+    const blackLayer = document.createElement("div");
+    blackLayer.className = "blackLayer";
+
+    // helper: for a black key, position it between its adjacent whites
+    // mapping: black pc -> offset relative to white index
+    // C# between C and D, etc.
+    // We'll compute x based on nearest white key in the rendered row.
+    function whiteIndexForMidi(m){
+      // find last white at or below midi
+      let idx = -1;
+      for(const w of whites){
+        if(w.midi < m) idx = w.whiteIndex;
+        if(w.midi > m) break;
+      }
+      return idx;
+    }
+
+    for(const b of blacks){
+      const key = document.createElement("div");
+      key.className = "key blackKey";
+      key.dataset.midi = String(b.midi);
+      key.dataset.pc = String(b.pc);
+
+      // position: to the right of previous white key, centered
+      const wi = whiteIndexForMidi(b.midi);
+      const x = (wi + 1) * parseInt(getComputedStyle(document.documentElement).getPropertyValue("--whiteW"),10)
+                - parseInt(getComputedStyle(document.documentElement).getPropertyValue("--blackW"),10)/2;
+      key.style.left = `${x}px`;
+
+      key.appendChild(makeKeyLabels(b.midi, b.pc, true));
+
+      let down=false;
+      key.addEventListener("mousedown", (e) => { e.preventDefault(); down=true; playNote(b.midi, 110); });
+      window.addEventListener("mouseup", () => { if(down){ down=false; stopNote(b.midi); } });
+
+      key.addEventListener("click", (e) => { e.stopPropagation(); selectPC(b.pc); });
+
+      blackLayer.appendChild(key);
+    }
+
+    keyboardEl.appendChild(blackLayer);
+
+    // apply label toggles + colors
+    setBodyLabelToggles();
+    updateAllKeys();
+    highlightKeysForSelectedPC();
+  }
+
+  function makeKeyLabels(midi, pc, isBlack=false){
+    const wrap = document.createElement("div");
+
+    const cents = document.createElement("div");
+    cents.className = "keyLabel lblCents";
+    cents.textContent = fmtSignedCents(state.pcCents[pc] ?? 0);
+
+    const name = document.createElement("div");
+    name.className = "keyLabel lblName";
+    name.textContent = midiToName(midi);
+
+    const mid = document.createElement("div");
+    mid.className = "keyLabel lblMidi";
+    mid.textContent = `M${midi}`;
+
+    const idx = midi - state.firstMidi;
+    const kbd = document.createElement("div");
+    kbd.className = "keyLabel lblKbd";
+    kbd.textContent = KBD_KEYS[idx] ? `key: ${KBD_KEYS[idx]}` : "";
+
+    wrap.appendChild(cents);
+    wrap.appendChild(mid);
+    wrap.appendChild(kbd);
+    wrap.appendChild(name);
+    return wrap;
+  }
+
+  function highlightKeysForSelectedPC(){
+    const pc = state.selectedPC;
+    keyboardEl.querySelectorAll(".key").forEach(k => {
+      const kpc = Number(k.dataset.pc);
+      k.classList.toggle("highlight", kpc === pc);
+    });
+  }
+
+  function updateKeysForPC(pc){
+    // update cents labels + optional coloring for all keys of this pc
+    const cents = Number(state.pcCents[pc] ?? 0);
+
+    keyboardEl.querySelectorAll(`.key[data-pc="${pc}"]`).forEach(k => {
+      const lbl = k.querySelector(".lblCents");
+      if(lbl) lbl.textContent = fmtSignedCents(cents);
+    });
+
+    applyKeyColorsForPC(pc);
+  }
+
+  function updateAllKeys(){
+    for(let pc=0; pc<12; pc++) updateKeysForPC(pc);
+  }
+
+  // -----------------------------
+  // Coloring
+  // -----------------------------
+  function autoColorForCents(cents){
+    // Simple diverging tint: negative => red, positive => green, near 0 => neutral
+    const t = clamp(Math.abs(cents)/100, 0, 1) * clamp(state.autoIntensity, 0, 2);
+    const a = clamp(0.12 + 0.28*t, 0, 0.45);
+    if(cents > 0) return `rgba(0, 160, 60, ${a})`;
+    if(cents < 0) return `rgba(200, 40, 40, ${a})`;
+    return `rgba(120, 120, 120, 0.06)`;
+  }
+
+  function applyKeyColorsForPC(pc){
+    const on = state.colorOn;
+    const mode = state.colorMode;
+
+    keyboardEl.querySelectorAll(`.key[data-pc="${pc}"]`).forEach(k => {
+      if(!on){
+        k.style.background = "";
+        return;
+      }
+      if(mode === "custom"){
+        const c = state.pcColors[pc];
+        if(c){
+          k.style.background = c;
+        } else {
+          k.style.background = "";
+        }
+      } else {
+        const cents = Number(state.pcCents[pc] ?? 0);
+        k.style.background = autoColorForCents(cents);
+      }
+    });
+  }
+
+  // -----------------------------
+  // Save / load preset
+  // -----------------------------
+  function downloadJSON(filename, obj){
+    const blob = new Blob([JSON.stringify(obj, null, 2)], {type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function currentPreset(){
+    return {
+      version: 2,
+      savedAt: new Date().toISOString(),
+      state: {
+        tuningN: state.tuningN,
+        firstMidi: state.firstMidi,
+        lastMidi: state.lastMidi,
+        pcCents: state.pcCents,
+        ccByPC: state.ccByPC,
+        mapCfg: state.mapCfg,
+        quantizeOn: state.quantizeOn,
+        quantStep: state.quantStep,
+        showName: state.showName,
+        showCents: state.showCents,
+        showMidi: state.showMidi,
+        showKbd: state.showKbd,
+        colorOn: state.colorOn,
+        colorMode: state.colorMode,
+        autoIntensity: state.autoIntensity,
+        pcColors: state.pcColors,
+        selectedPC: state.selectedPC
+      }
+    };
+  }
+
+  function applyPreset(preset){
+    const s = preset?.state;
+    if(!s) return;
+
+    state.tuningN = Number(s.tuningN ?? state.tuningN);
+    state.firstMidi = Number(s.firstMidi ?? state.firstMidi);
+    state.lastMidi = Number(s.lastMidi ?? state.lastMidi);
+
+    if(Array.isArray(s.pcCents) && s.pcCents.length === 12) state.pcCents = s.pcCents.map(Number);
+
+    // mappings
+    state.ccByPC = new Array(12).fill(null);
+    state.pcByCC = new Map();
+    if(Array.isArray(s.ccByPC) && s.ccByPC.length === 12){
+      s.ccByPC.forEach((m, pc) => {
+        if(m && typeof m.cc === "number" && typeof m.channel === "number"){
+          state.ccByPC[pc] = { cc: Number(m.cc), channel: Number(m.channel) };
+          state.pcByCC.set(`${Number(m.channel)}:${Number(m.cc)}`, pc);
+        }
+      });
+    }
+
+    if(Array.isArray(s.mapCfg) && s.mapCfg.length === 12){
+      state.mapCfg = s.mapCfg.map((c) => ({
+        minCents: Number(c?.minCents ?? -100),
+        maxCents: Number(c?.maxCents ??  100),
+        curve: String(c?.curve ?? "linear"),
+        invert: !!c?.invert
+      }));
+    }
+
+    state.quantizeOn = !!s.quantizeOn;
+    state.quantStep = Number(s.quantStep ?? 25);
+
+    state.showName = !!s.showName;
+    state.showCents = !!s.showCents;
+    state.showMidi = !!s.showMidi;
+    state.showKbd = !!s.showKbd;
+
+    state.colorOn = !!s.colorOn;
+    state.colorMode = String(s.colorMode ?? "custom");
+    state.autoIntensity = Number(s.autoIntensity ?? 1.0);
+    if(Array.isArray(s.pcColors) && s.pcColors.length === 12) state.pcColors = s.pcColors.map(v => v ? String(v) : null);
+
+    state.selectedPC = clamp(Number(s.selectedPC ?? 0), 0, 11);
+    state.learnTargetPC = state.learnOn ? state.selectedPC : null;
+
+    saveState();
+
+    // refresh selects and UI
+    tuningEl.value = String(state.tuningN);
+    firstSel.value = String(state.firstMidi);
+    lastSel.value = String(state.lastMidi);
+
+    ckName.checked = state.showName;
+    ckCents.checked = state.showCents;
+    ckMidi.checked = state.showMidi;
+    ckKbd.checked = state.showKbd;
+
+    ckQuantize.checked = state.quantizeOn;
+    quantStepEl.value = String(state.quantStep);
+
+    ckColor.checked = state.colorOn;
+    colorModeEl.value = state.colorMode;
+    autoIntensityEl.value = String(state.autoIntensity);
+
+    renderAll();
+    setStatus("Preset loaded.");
+  }
+
+  // -----------------------------
+  // Note range selects
+  // -----------------------------
+  const firstSel = document.getElementById("firstNote");
+  const lastSel  = document.getElementById("lastNote");
+
+  function buildNoteOptions(){
+    firstSel.innerHTML = "";
+    lastSel.innerHTML  = "";
+    const MIN = 21;  // A0
+    const MAX = 108; // C8
+    for(let m=MIN; m<=MAX; m++){
+      const o1 = document.createElement("option");
+      o1.value = String(m);
+      o1.textContent = midiToName(m);
+      firstSel.appendChild(o1);
+
+      const o2 = document.createElement("option");
+      o2.value = String(m);
+      o2.textContent = midiToName(m);
+      lastSel.appendChild(o2);
+    }
+    firstSel.value = String(state.firstMidi);
+    lastSel.value  = String(state.lastMidi);
+
+    firstSel.onchange = () => {
+      state.firstMidi = Number(firstSel.value);
+      if(state.firstMidi > state.lastMidi) state.lastMidi = state.firstMidi;
+      lastSel.value = String(state.lastMidi);
+      saveState();
+      buildKeyboard();
+      setStatus("Range updated.");
+    };
+
+    lastSel.onchange = () => {
+      state.lastMidi = Number(lastSel.value);
+      if(state.lastMidi < state.firstMidi) state.firstMidi = state.lastMidi;
+      firstSel.value = String(state.firstMidi);
+      saveState();
+      buildKeyboard();
+      setStatus("Range updated.");
+    };
+  }
+
+  // -----------------------------
+  // Controls wiring
+  // -----------------------------
+  const btnMidi = document.getElementById("btnMidi");
+  const btnAudio = document.getElementById("btnAudio");
+  const btnReset = document.getElementById("btnReset");
+  const btnPanic = document.getElementById("btnPanic");
+  const btnLearn = document.getElementById("btnLearn");
+
+  const tuningEl = document.getElementById("tuning");
+  const oscTypeEl = document.getElementById("oscType");
+  const gainEl = document.getElementById("gain");
+
+  const ckName = document.getElementById("ckName");
+  const ckCents = document.getElementById("ckCents");
+  const ckMidi = document.getElementById("ckMidi");
+  const ckKbd = document.getElementById("ckKbd");
+
+  const ckQuantize = document.getElementById("ckQuantize");
+  const quantStepEl = document.getElementById("quantStep");
+
+  const ckColor = document.getElementById("ckColor");
+  const colorModeEl = document.getElementById("colorMode");
+  const autoIntensityEl = document.getElementById("autoIntensity");
+  const btnClearColors = document.getElementById("btnClearColors");
+
+  const btnSavePreset = document.getElementById("btnSavePreset");
+  const btnLoadPreset = document.getElementById("btnLoadPreset");
+  const filePreset = document.getElementById("filePreset");
+
+  btnMidi.addEventListener("click", enableMIDI);
+
+  btnAudio.addEventListener("click", async () => {
+    startAudio();
+    if(audioCtx && audioCtx.state === "suspended") await audioCtx.resume();
+    state.audioEnabled = true;
+    setStatus("Audio context running.");
+  });
+
+  gainEl.addEventListener("input", () => {
+    if(masterGain) masterGain.gain.value = clamp(Number(gainEl.value || 0.2), 0, 1);
+  });
+
+  tuningEl.addEventListener("change", () => applyTuning(Number(tuningEl.value)));
+
+  btnReset.addEventListener("click", () => {
+    // reset offsets to tuning defaults
+    const pcOff = pitchClassOffsetsForNTET(state.tuningN);
+    for(let pc=0; pc<12; pc++) state.pcCents[pc] = pcOff[pc];
+    saveState();
+    renderAll();
+    setStatus("Offsets reset to tuning defaults.");
+  });
+
+  btnPanic.addEventListener("click", () => { panic(); setStatus("All notes stopped."); });
+
+  btnLearn.addEventListener("click", () => {
+    state.learnOn = !state.learnOn;
+    btnLearn.classList.toggle("toggled", state.learnOn);
+    btnLearn.textContent = state.learnOn ? "Learn CC (ON)" : "Learn CC";
+    state.learnTargetPC = state.learnOn ? state.selectedPC : null;
+    saveState();
+    renderFaders();
+    setStatus(state.learnOn ? "Learn CC is ON. Select a fader then move a knob." : "Learn CC is OFF.");
+  });
+
+  // label toggles
+  function syncLabelState(){
+    state.showName = ckName.checked;
+    state.showCents = ckCents.checked;
+    state.showMidi = ckMidi.checked;
+    state.showKbd = ckKbd.checked;
+    saveState();
+    setBodyLabelToggles();
+  }
+  ckName.addEventListener("change", syncLabelState);
+  ckCents.addEventListener("change", syncLabelState);
+  ckMidi.addEventListener("change", syncLabelState);
+  ckKbd.addEventListener("change", syncLabelState);
+
+  // quantize
+  ckQuantize.addEventListener("change", () => {
+    state.quantizeOn = ckQuantize.checked;
+    saveState();
+    setStatus();
+  });
+  quantStepEl.addEventListener("input", () => {
+    state.quantStep = clamp(Number(quantStepEl.value || 25), 1, 100);
+    saveState();
+    setStatus();
+  });
+
+  // coloring
+  ckColor.addEventListener("change", () => {
+    state.colorOn = ckColor.checked;
+    saveState();
+    updateAllKeys();
+  });
+  colorModeEl.addEventListener("change", () => {
+    state.colorMode = colorModeEl.value;
+    saveState();
+    updateAllKeys();
+  });
+  autoIntensityEl.addEventListener("input", () => {
+    state.autoIntensity = Number(autoIntensityEl.value || 1.0);
+    saveState();
+    if(state.colorMode === "auto") updateAllKeys();
+  });
+  btnClearColors.addEventListener("click", () => {
+    state.pcColors = new Array(12).fill(null);
+    saveState();
+    updateAllKeys();
+    setStatus("Custom colors cleared.");
+  });
+
+  // presets
+  btnSavePreset.addEventListener("click", () => {
+    downloadJSON(`microtonal_preset_${new Date().toISOString().replace(/[:.]/g,"-")}.json`, currentPreset());
+  });
+  btnLoadPreset.addEventListener("click", () => filePreset.click());
+  filePreset.addEventListener("change", async () => {
+    const f = filePreset.files?.[0];
+    if(!f) return;
+    const txt = await f.text();
+    try{
+      const preset = JSON.parse(txt);
+      applyPreset(preset);
+    }catch(e){
+      setStatus("Failed to load preset: invalid JSON.");
+    }finally{
+      filePreset.value = "";
+    }
+  });
+
+  // computer keyboard play
+  function bindComputerKeyboard(){
+    window.addEventListener("keydown", (e) => {
+      if(e.repeat) return;
+      const k = e.key.toLowerCase();
+      const idx = KBD_KEYS.indexOf(k);
+      if(idx < 0) return;
+      const midi = state.firstMidi + idx;
+      if(midi > state.lastMidi) return;
+      playNote(midi, 105);
+    });
+    window.addEventListener("keyup", (e) => {
+      const k = e.key.toLowerCase();
+      const idx = KBD_KEYS.indexOf(k);
+      if(idx < 0) return;
+      const midi = state.firstMidi + idx;
+      if(midi > state.lastMidi) return;
+      stopNote(midi);
+    });
+  }
+
+  // -----------------------------
+  // Render all
+  // -----------------------------
+  function renderAll(){
+    renderFaders();
+    renderMappings();
+    renderMapSettings();
+    buildKeyboard();
+    highlightKeysForSelectedPC();
+  }
+
+  // -----------------------------
+  // Init
+  // -----------------------------
+  loadState();
+
+  // ensure offsets exist
+  if(!state.pcCents || state.pcCents.length !== 12){
+    state.pcCents = pitchClassOffsetsForNTET(state.tuningN);
+  }
+
+  // sync UI controls from state
+  tuningEl.value = String(state.tuningN);
+
+  ckName.checked = state.showName;
+  ckCents.checked = state.showCents;
+  ckMidi.checked = state.showMidi;
+  ckKbd.checked = state.showKbd;
+  setBodyLabelToggles();
+
+  ckQuantize.checked = state.quantizeOn;
+  quantStepEl.value = String(state.quantStep);
+
+  ckColor.checked = state.colorOn;
+  colorModeEl.value = state.colorMode;
+  autoIntensityEl.value = String(state.autoIntensity);
+
+  btnLearn.classList.toggle("toggled", state.learnOn);
+  btnLearn.textContent = state.learnOn ? "Learn CC (ON)" : "Learn CC";
+  state.learnTargetPC = state.learnOn ? state.selectedPC : null;
+
+  buildNoteOptions();
+  bindComputerKeyboard();
+  renderAll();
+  setStatus();
+
+})();
+</script>
+</body>
+</html>
