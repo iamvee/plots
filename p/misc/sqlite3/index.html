@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQLite </title>
+    <!-- Load sql.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+    <!-- Load Plotly.js for charting -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --border-color: #e5e7eb;
+            --success-color: #10b981;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1400px; /* Wider to accommodate side-by-side layout */
+            margin: 0 auto;
+        }
+
+        /* Header */
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        h1 { margin: 0; color: var(--text-main); font-size: 1.875rem; }
+        p.subtitle { color: var(--text-muted); margin-top: 0.5rem; }
+
+        /* Drop Zone */
+        #drop-zone {
+            background-color: var(--card-bg);
+            border: 2px dashed #cbd5e1;
+            border-radius: 12px;
+            padding: 2rem 1rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-bottom: 2rem;
+        }
+        #drop-zone:hover { border-color: var(--primary); background-color: #f8fafc; }
+        #drop-zone.dragover { border-color: var(--primary); background-color: #eef2ff; transform: scale(1.01); }
+        .btn-select {
+            background-color: var(--primary); color: white; padding: 0.5rem 1rem;
+            border-radius: 6px; border: none; font-weight: 500; cursor: pointer; margin-top: 1rem;
+        }
+        .btn-select:hover { background-color: var(--primary-hover); }
+        input[type="file"] { display: none; }
+
+        /* Status */
+        #status-area { text-align: center; margin-bottom: 1rem; font-weight: 500; min-height: 24px; }
+        .error { color: #ef4444; } .success { color: var(--success-color); }
+
+        /* Main Layout Grid */
+        .main-layout {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+            flex-wrap: wrap; /* Responsive wrapping */
+        }
+
+        /* Left Panel (Tables) */
+        .left-panel {
+            flex: 2;
+            min-width: 0; /* Prevents flex overflow issues */
+            width: 100%;
+        }
+
+        /* Right Panel (Plots) */
+        .right-panel {
+            flex: 1;
+            min-width: 300px;
+            display: none; /* Hidden until data is found */
+            flex-direction: column;
+            gap: 20px;
+            position: sticky;
+            top: 20px;
+        }
+
+        /* Tabs Styling */
+        .tabs-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            border-bottom: 2px solid #ddd;
+            margin-bottom: 0;
+        }
+
+        .tab-btn {
+            padding: 10px 16px;
+            border: 1px solid transparent;
+            border-bottom: none;
+            background: #e5e7eb;
+            color: #6b7280;
+            cursor: pointer;
+            border-radius: 8px 8px 0 0;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .tab-btn:hover { background: #d1d5db; }
+
+        .tab-btn.active {
+            background: var(--card-bg);
+            color: var(--primary);
+            border-color: #ddd;
+            margin-bottom: -2px; /* Overlap border */
+            border-bottom: 2px solid var(--card-bg);
+            z-index: 10;
+        }
+
+        /* Special Styling for TBL_RealTimeData */
+        .tab-btn.special-tab {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        .tab-btn.special-tab:hover {
+            background-color: #a7f3d0;
+        }
+        .tab-btn.special-tab.active {
+            background-color: var(--success-color);
+            color: white;
+            border-color: var(--success-color);
+        }
+
+        /* Tab Content */
+        .tab-content {
+            display: none;
+            background: var(--card-bg);
+            border: 1px solid #ddd;
+            border-top: none;
+            padding: 20px;
+            border-radius: 0 0 8px 8px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .tab-content.active { display: block; }
+
+        /* Table Actions */
+        .table-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .btn-download {
+            background-color: #374151;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-download:hover { background-color: #1f2937; }
+
+        /* Table Styling */
+        .table-responsive {
+            overflow-x: auto;
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+
+        th {
+            background-color: #f8fafc;
+            text-align: left;
+            padding: 10px 15px;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            border-bottom: 2px solid #e5e7eb;
+            z-index: 5;
+        }
+
+        td {
+            padding: 8px 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        tr:hover td { background-color: #f9fafb; }
+
+        /* Plot Container */
+        .plot-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid var(--border-color);
+            height: 400px; /* Fixed height for consistency */
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h3>SQLite Parser (Labthink tensile test machine)</h3>
+    </header>
+
+    <div id="drop-zone">
+        <span style="font-size: 3rem;">📂</span>
+        <p>Drag and drop your SQLite file here</p>
+        <button class="btn-select" onclick="document.getElementById('file-input').click()">Browse Files</button>
+        <input type="file" id="file-input" accept=".sqlite,.db,.sqlite3">
+    </div>
+
+    <div id="status-area"></div>
+
+    <!-- Main Layout: Tabs on Left, Plots on Right -->
+    <div class="main-layout">
+        
+        <!-- Left Panel: Tabs & Tables -->
+        <div class="left-panel">
+            <div id="tabs-nav" class="tabs-nav"></div>
+            <div id="tabs-content-area"></div>
+        </div>
+
+        <!-- Right Panel: Plots -->
+        <div id="right-panel" class="right-panel">
+            <h3 style="margin: 0; color: #374151;">Real-Time Data Analysis</h3>
+            <div id="plot1" class="plot-card"></div>
+            <div id="plot2" class="plot-card"></div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const statusArea = document.getElementById('status-area');
+    const tabsNav = document.getElementById('tabs-nav');
+    const tabsContentArea = document.getElementById('tabs-content-area');
+    const rightPanel = document.getElementById('right-panel');
+    
+    let SQL = null;
+    let db = null; // Store database instance globally for CSV export if needed
+    let currentTables = {}; // Store table data
+
+    // 1. Initialize SQL.js
+    const config = {
+        locateFile: filename => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${filename}`
+    };
+
+    initSqlJs(config).then(function(sql) {
+        SQL = sql;
+        updateStatus("Ready. Please drop a file.", "success");
+    }).catch(err => {
+        console.error(err);
+        updateStatus("Failed to load SQL engine.", "error");
+    });
+
+    function updateStatus(msg, type) {
+        statusArea.textContent = msg;
+        statusArea.className = type;
+    }
+
+    // 2. Event Listeners
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', (e) => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+    // 3. Main File Handler
+    function handleFile(file) {
+        if (!SQL) return;
+        
+        updateStatus("Processing database...", "");
+        // Reset UI
+        tabsNav.innerHTML = "";
+        tabsContentArea.innerHTML = "";
+        rightPanel.style.display = 'none';
+        currentTables = {};
+
+        const reader = new FileReader();
+        reader.onload = function() {
+            try {
+                const Uints = new Uint8Array(reader.result);
+                if(db) db.close(); // Close previous if exists
+                db = new SQL.Database(Uints);
+                
+                // Fetch tables
+                const result = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+                
+                if (result.length === 0 || result[0].values.length === 0) {
+                    updateStatus("No tables found.", "error");
+                    return;
+                }
+
+                const tables = result[0].values.flat();
+                updateStatus(`Found ${tables.length} tables.`, "success");
+
+                // Process tables
+                tables.forEach((tableName, index) => {
+                    // Limit rows for performance in preview, but keep enough for plots
+                    // If TBL_RealTimeData, we might want more data, but let's stick to a safe limit for the grid view
+                    // We will fetch full columns for plotting separately
+                    const content = db.exec(`SELECT * FROM "${tableName}" LIMIT 1000`);
+                    if (content.length > 0) {
+                        currentTables[tableName] = content[0];
+                        createTab(tableName, content[0], index === 0);
+                    }
+                });
+
+                // Check for RealTimeData and Plot
+                checkForPlots(db);
+
+            } catch (err) {
+                console.error(err);
+                updateStatus("Error reading SQLite file.", "error");
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    // 4. Tab UI Generation
+    function createTab(tableName, data, isActive) {
+        // Create Button
+        const btn = document.createElement('button');
+        btn.textContent = tableName;
+        btn.className = `tab-btn ${isActive ? 'active' : ''}`;
+        
+        // Specific requirement: Green tab for "TBL_RealTimeData"
+        if (tableName === 'TBL_RealTimeData') {
+            btn.classList.add('special-tab');
+        }
+
+        btn.onclick = () => switchTab(tableName);
+        tabsNav.appendChild(btn);
+
+        // Create Content Panel
+        const panel = document.createElement('div');
+        panel.id = `panel-${tableName}`;
+        panel.className = `tab-content ${isActive ? 'active' : ''}`;
+
+        // Top Actions Bar (Download CSV)
+        const actions = document.createElement('div');
+        actions.className = 'table-actions';
+        
+        const title = document.createElement('h3');
+        title.style.margin = 0;
+        title.textContent = `${tableName} (${data.values.length} rows preview)`;
+        
+        const dlBtn = document.createElement('button');
+        dlBtn.className = 'btn-download';
+        dlBtn.innerHTML = '<span>⬇</span> Download CSV';
+        dlBtn.onclick = () => downloadCSV(tableName, data.columns, data.values);
+
+        actions.appendChild(title);
+        actions.appendChild(dlBtn);
+        panel.appendChild(actions);
+
+        // Table Grid
+        const wrapper = document.createElement('div');
+        wrapper.className = 'table-responsive';
+        
+        const table = document.createElement('table');
+        const thead = document.createElement('thead');
+        const tbody = document.createElement('tbody');
+
+        // Headers
+        const trHead = document.createElement('tr');
+        data.columns.forEach(col => {
+            const th = document.createElement('th');
+            th.textContent = col;
+            trHead.appendChild(th);
+        });
+        thead.appendChild(trHead);
+
+        // Body
+        data.values.forEach(row => {
+            const tr = document.createElement('tr');
+            row.forEach(val => {
+                const td = document.createElement('td');
+                td.textContent = val === null ? '' : val;
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+
+        table.appendChild(thead);
+        table.appendChild(tbody);
+        wrapper.appendChild(table);
+        panel.appendChild(wrapper);
+
+        tabsContentArea.appendChild(panel);
+    }
+
+    function switchTab(targetName) {
+        // Update buttons
+        Array.from(tabsNav.children).forEach(btn => {
+            if (btn.textContent === targetName) btn.classList.add('active');
+            else btn.classList.remove('active');
+        });
+        
+        // Update panels
+        Array.from(tabsContentArea.children).forEach(panel => {
+            if (panel.id === `panel-${targetName}`) panel.classList.add('active');
+            else panel.classList.remove('active');
+        });
+    }
+
+    // 5. CSV Download Logic
+    function downloadCSV(filename, columns, values) {
+        let csvContent = "data:text/csv;charset=utf-8,";
+        
+        // Add Header
+        csvContent += columns.map(e => `"${e}"`).join(",") + "\n";
+        
+        // Add Rows
+        values.forEach(row => {
+            const rowStr = row.map(e => {
+                if (e === null) return "";
+                return `"${String(e).replace(/"/g, '""')}"`; // Escape quotes
+            }).join(",");
+            csvContent += rowStr + "\n";
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `${filename}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // 6. Plotting Logic
+    function checkForPlots(dbInstance) {
+        // Check if TBL_RealTimeData exists in the data we already fetched
+        // Note: use existing `currentTables` to save a query if possible, 
+        // but for plotting we usually want ALL data, not just the limit 1000 preview.
+        
+        const tableName = "TBL_RealTimeData";
+        const result = dbInstance.exec(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`);
+        
+        if (result.length > 0) {
+            // Table exists, fetch all data for plotting
+            const dataResult = dbInstance.exec(`SELECT * FROM "${tableName}"`);
+            if (dataResult.length > 0) {
+                const data = dataResult[0];
+                const cols = data.columns;
+                const rows = data.values;
+
+                // Find indices
+                const idxDisp = cols.indexOf('Displacement');
+                const idxForce = cols.indexOf('Force');
+                const idxStrain = cols.indexOf('Strain');
+                const idxStress = cols.indexOf('Stress');
+
+                // Verify we have the columns
+                if (idxDisp !== -1 && idxForce !== -1 && idxStrain !== -1 && idxStress !== -1) {
+                    rightPanel.style.display = 'flex';
+                    
+                    // Extract Arrays
+                    const dispArr = rows.map(r => r[idxDisp]);
+                    const forceArr = rows.map(r => r[idxForce]);
+                    const strainArr = rows.map(r => r[idxStrain]);
+                    const stressArr = rows.map(r => r[idxStress]);
+
+                    renderPlots(dispArr, forceArr, strainArr, stressArr);
+                }
+            }
+        }
+    }
+
+    function renderPlots(disp, force, strain, stress) {
+        const commonLayout = {
+            margin: { t: 30, r: 20, l: 50, b: 40 },
+            font: { family: '-apple-system, sans-serif' },
+            autosize: true
+        };
+
+        // Plot 1: Displacement vs Force
+        Plotly.newPlot('plot1', [{
+            x: disp,
+            y: force,
+            mode: 'lines', // or 'markers'
+            type: 'scatter',
+            name: 'Force-Disp',
+            line: { color: '#4f46e5', width: 2 }
+        }], {
+            ...commonLayout,
+            title: 'Displacement vs Force',
+            xaxis: { title: 'Displacement' },
+            yaxis: { title: 'Force' }
+        });
+
+        // Plot 2: Strain vs Stress
+        Plotly.newPlot('plot2', [{
+            x: strain,
+            y: stress,
+            mode: 'lines',
+            type: 'scatter',
+            name: 'Stress-Strain',
+            line: { color: '#10b981', width: 2 }
+        }], {
+            ...commonLayout,
+            title: 'Strain vs Stress',
+            xaxis: { title: 'Strain' },
+            yaxis: { title: 'Stress' }
+        });
+    }
+
+    // Handle Window Resize for Plots
+    window.onresize = function() {
+        if(rightPanel.style.display !== 'none') {
+            Plotly.Plots.resize('plot1');
+            Plotly.Plots.resize('plot2');
+        }
+    };
+</script>
+
+</body>
+</html>
